@@ -1,0 +1,71 @@
+% !TEX program = xelatex
+\documentclass[uplatex]{jsarticle}
+\usepackage{amsmath}
+\usepackage[dvipdfmx]{graphicx}
+\setcounter{tocdepth}{3}
+\usepackage{float}
+\usepackage{moreverb}
+\usepackage{lscape}
+\usepackage{ascmac}
+
+\usepackage{wasysym}
+\usepackage{enumitem}
+
+\usepackage[margin=25mm]{geometry}
+
+\title{生成AI利用申告書}
+\author{25G1144　脇阪隼人}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{itemize}
+  \item プログラムファイル名：HCK02\_01.ino
+  \item 使用したAIツール：Gemini
+\end{itemize}
+
+\section*{1. 使用目的}
+授業内で作成したプログラムにおいて，シリアルプロッタに描画される正弦波の波形が不規則に歪む現象が発生したため，その原因および改善方法の検討のために生成AIを利用した．
+
+\section*{2. AIへの指示（プロンプト）}
+自身で作成した \texttt{.ino} ファイルの内容を提示した上で，「このプログラムを用いてマイクから入力されたアナログ信号をシリアルプロッタで表示すると，波形が乱れ，正確に正弦波を観察できなかった．原因を分析し，具体的な改善案を提示せよ．」と指示した．
+
+\section*{3. AI出力の利用方法}
+\begin{itemize}
+    \renewcommand{\labelitemi}{} 
+    \item \Square そのまま利用した
+    \item \Square 一部修正のうえ利用した
+    \item \CheckedBox 参考情報としてのみ利用した
+\end{itemize}
+AIの回答により，波形の乱れは「ソフトウェア的な演算負荷によるサンプリング周期のばらつき」と「通信データの冗長性」が主因であるとの知見を得た．具体的には以下の指摘を参考にした．
+\begin{itemize}
+	\item \texttt{pow(2, RESOLUTION)} などの重い浮動小数点演算を \texttt{loop} 内で繰り返すことによる処理遅延．
+	\item 各データにラベル文字列を付与して送信することによる通信帯域の圧迫．
+	\item \texttt{delay()} 等に依存しない，\texttt{micros()} を用いた厳密なサンプリング間隔の指定．
+\end{itemize}
+これらの情報に基づき，既存コードの無駄な処理を特定し，自身の手でプログラムの再構築を行った．
+
+\section*{4. 正当性の確認方法}
+AIが提示した改善案の正当性を確認するため，以下の実機検証を行った．
+\begin{itemize}
+	\item \textbf{通信プロトコルの簡略化：} 文字列送信を廃止し，純粋な数値データのみをカンマ区切りで送信する形式に変更し，シリアルプロッタ上での描画密度が向上するかを確認した．
+	\item \textbf{演算負荷の軽減：} 定数計算（べき乗等）を \texttt{setup} 内や定義段階で完了させ，\texttt{loop} 内の演算を最小限に抑えることで，波形の連続性が改善されることを確認した．
+	\item \textbf{等間隔サンプリングの検証：} \texttt{micros()} を用いた時間管理を導入することで，データ出力を等間隔で取得し，グラフを描画するようにした．
+\end{itemize}
+
+\section*{5. 問題点および誤りの有無}
+\begin{itemize}
+\renewcommand{\labelitemi}{}
+  \item \Square 問題または誤りがあった
+  \item \CheckedBox 問題または誤りは確認されなかった
+\end{itemize}
+動作確認の結果，演算負荷の軽減と通信形式の変更により，シリアルプロッタ上のグラフ表示は劇的に改善された．一方で，サンプリングレートを1kHzから20 kHzまで順次上げながら検証した結果，4kHz程度までは再現性が向上したが，それ以上のレート（8kHz〜20kHz）では描画の滑らかさに顕著な変化は見られなかった．これは，PC側の表示処理能力やシリアル通信の物理的限界によるものと推測され，ハードウェア構成上の限界があることを実機を通して確認した．
+
+\section*{6. 独自に工夫した点}
+単にAIの指摘を反映させるだけでなく，サンプリングレートを変数として定義し，即座に切り替えられるコード仕様にした．これにより，1, 2, 4, 8, 10, 20kHzといった複数の条件下での動作比較を迅速に行うことができ，サンプリングレートの有効性を検証することができた．また，コード全体を簡素化し，コードの追記は最小限にとどめた．
+\section*{参考文献}
+なし
+
+\end{document}
