@@ -1,0 +1,68 @@
+% !TEX program = xelatex
+\documentclass[uplatex]{jsarticle}
+\usepackage{amsmath}
+\usepackage[dvipdfmx]{graphicx}
+\setcounter{tocdepth}{3}
+\usepackage{float}
+\usepackage{moreverb}
+\usepackage{lscape}
+\usepackage{ascmac}
+\usepackage{wasysym}
+\usepackage[margin=25mm]{geometry}
+\usepackage{enumitem}
+
+\title{生成AI利用申告書}
+\author{25G1144　脇阪隼人}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{itemize}
+  \item プログラムファイル名：HCK02\_02.ino，HCK02\_02.pde
+  \item 使用したAIツール：ChatGPT
+\end{itemize}
+
+\section*{1. 使用目的}
+Arduinoから送信される測定値をProcessing側でリアルタイムに蓄積・描画するシステムを構築するにあたり，効率的なバッファ管理手法および波形描画アルゴリズムの最適化を検討するために生成AIを利用した．
+
+\section*{2. AIへの指示（プロンプト）}
+自身で作成したArduinoの \texttt{.ino} ファイルの内容を提示した上で，「Processing側でシリアルデータを受信し，それらを動的な配列として保持しながら，逐次グラフとして描画するためのプログラム構造を提示せよ．」と指示した．
+
+\section*{3. AI出力の利用方法}
+\begin{itemize}
+    \renewcommand{\labelitemi}{} 
+    \item \Square そのまま利用した
+    \item \CheckedBox 一部修正のうえ利用した
+    \item \Square 参考情報としてのみ利用した
+\end{itemize}
+AIより提案された「配列要素をループ処理で順次前方へ移動させ，末尾に最新値を代入するバッファ・シフトアルゴリズム」を基礎として採用した．動作確認を経て，観測の利便性を高めるために以下の機能拡張および修正をAIと共働で行った．
+\begin{itemize}
+	\item \textbf{動的なズーム機能の実装：} 全配列を表示する初期案に対し，時間軸を指定の倍率で拡大表示するため，変数 \texttt{xzoom} および表示点数 \texttt{plt} を使用したズーム機能を作成した．．
+	\item \textbf{基準線の追加：} 測定電圧の大小を直感的に把握可能とするため，最大・最小振幅の閾値として赤い基準線を描画した．
+	\item \textbf{動的な表示レンジ最適化：} 波形が画面上下端に接することによる視認性の低下を防ぐため，\texttt{marginRatio} を用いてグラフの上下に余白を追加した．
+\end{itemize}
+
+\section*{4. 正当性の確認方法}
+AIの提案内容および自身による修正が適切に機能しているかを確認するため，以下の実機検証を行った．
+\begin{itemize}
+	\item \textbf{リアルタイム性の検証：} 入力信号が遅延なく右端から追加され，期待される速度で左方向へ流動することを目視にて確認した．
+	\item \textbf{スケーリングの妥当性：} \texttt{map} 関数による座標変換の結果，入力電圧の変動が画面上のピクセル位置と正確に連動し，設定した基準線と整合していることを確認した．
+\end{itemize}
+
+\section*{5. 問題点および誤りの有無}
+\begin{itemize}
+\renewcommand{\labelitemi}{}
+  \item \Square 問題または誤りがあった
+  \item \CheckedBox 問題または誤りは確認されなかった
+\end{itemize}
+生成AIが作成したプログラムをの検証を行なった結果，データの受信・保持およびグラフ描画が正常に行われていたことを確認した．ただし，processingの実行ウィンドウに余白なくグラフが描画され，グラフ全体の視認性が低い，という課題が生じた．また，波形が密集しすぎてしまい波形の形状判別が困難であるといった実用上の不備があった．これらの問題点に対し，パラメータの調整および描画ロジックの修正を行うことで解決を図った．
+
+\section*{6. 独自に工夫した点}
+バッファ内の最新データから特定範囲のみを抽出して描画する機能を実装することで，時間軸の拡大・縮小を変数によって任意に制御可能な構成とした．これにより，高周波の信号であっても変数を変更することで，正弦波等の波形の形状を判別することを可能にした．また，汎用的なシリアルプロッタの機能に準じ，振幅の最大・最小値を視覚化することで，測定値のスケール感を直感的に理解できるインターフェースを実現した．
+
+\section*{参考文献}
+なし
+
+\end{document}
