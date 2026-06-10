@@ -1,0 +1,120 @@
+\documentclass[uplatex,dvipdfmx]{jlreq}
+\usepackage{jlreq-deluxe}
+\usepackage[noalphabet]{pxchfon} % must be after otf package
+\usepackage{stix2} %欧文＆数式フォント
+\usepackage[fleqn,tbtags]{mathtools} % 数式関連 (w/ amsmath)
+\usepackage{hira-stix} % ヒラギノフォント＆STIX2 フォント代替定義（Warning回避）
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage[hyphens]{url}
+
+\lstset{
+    language=Java,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue}\bfseries,
+    commentstyle=\color{gray}\itshape,
+    stringstyle=\color{orange},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    stepnumber=1,
+    numbersep=10pt,
+    frame=single,
+    frameround=tttt,
+    breaklines=true,
+    breakatwhitespace=true,
+    tabsize=2,
+    captionpos=b,
+    showstringspaces=false
+}
+
+\begin{document}
+
+\title{ピアノの倍音における位相ズレの物理的背景と\\デジタル音響合成における実装設計}
+\author{音響物理・デジタル信号処理レポート}
+\date{\today}
+
+\maketitle
+
+\section{はじめに}
+ピアノの音色を周波数解析する際、振幅スペクトル（各倍音の音量バランス）だけでなく、「位相（フェーズ）」の振る舞いが音の立ち上がり（アタック感）や空気感を決定づける重要な要素となる。本レポートでは、実際のピアノにおける基音から第6倍音までの位相ズレの物理的・音響学的要因を明らかにし、それをタイムドメイン（秒単位）に換算した上で、ProcessingのMinimライブラリを用いたウェーブテーブル合成への具体的な適用手法について解説する。
+
+\section{位相ズレを生じさせる物理的要因}
+本物のピアノにおいて、各倍音の位相が均一（同位相）にならず、ランダムかつ動的に変化する背景には主に以下の4つの要因がある。
+
+\subsection{ハンマーの接触時間（接触面の幅）}
+打弦の際、ハンマーのフェルトが弦に触れてから離れるまでに約2\,ms〜4\,msの時間を要する。この接触時間中、弦の各変位運動が相互に影響を受けるため、特に周期の短い高次倍音ほど、最大振幅に達するタイミング（初期位相）にミリ秒単位のばらつきが生じる。
+
+\subsection{打弦位置による非対称性}
+ピアノのハンマーは通常、弦の端から全体の $1/7 \sim 1/9$ の位置を叩く。この物理的な位置関係により、特定の倍音（特に弦の $1/3$ や $2/3$ の位置に節を持つ第3倍音など）は、基音の波形に対して大きく反転（逆位相に近い状態）して放射される。
+
+\subsection{弦の非調和性（インハーモニシティ）}
+ピアノの弦は有限の太さと剛性（硬さ）を持つため、倍音周波数は厳密な整数倍から高くなる。実際の各倍音周波数 $f_n$ は、非調和度定数 $B$（グランドピアノでは $B \approx 0.0001$）を用いて以下のヤングの公式で表される。
+\begin{equation}
+f_n = n \cdot f_1 \sqrt{1 + B \cdot n^2}
+\end{equation}
+この周波数の微小なズレにより、時間が経つにつれて各倍音の位相関係は絶え間なく変化（累積的なズレ）し続ける。
+
+\subsection{同音複弦の干渉}
+中高音域では1つの鍵盤に対して2〜3本の弦が張られており、調律時にわずかに周波数がズラされている。これが空気中や響板上で混ざり合うことで、位相の強め合いと弱め合い（うねり・コーラス効果）が自然に発生する。
+
+---
+
+\section{時間軸（ミリ秒）および位相（ラジアン）への換算設計}
+中央の「ラ」（$A_4 = 440\,\text{Hz}$）を基準とし、アタック時の物理的なタイムラグと、1秒経過時の非調和性による位相の進みを秒単位およびラジアン単位で算出した。
+
+\subsection{初期アタック時のタイムラグとラジアン換算}
+$A_4$（基音周期：約2.27\,ms）において、ハンマーフェルトのクッション性と打弦位置を考慮した各倍音の初期位相の設定目安を以下に示す。
+
+\begin{table}[h]
+\centering
+\caption{基音〜第6倍音の初期位相およびタイムラグ設計（基準：440\,Hz）}
+\begin{tabular}{lrrcl}
+\toprule
+倍音次数 & 理論周波数 & 初期位相 (rad) & タイムラグ (ms) & 音響的シミュレーション意図 \\
+\midrule
+第1倍音 (基音) & 440\,Hz  & $0.00$ ($\approx 0^\circ$)   & $0.00$ & すべての時間の基準 \\
+第2倍音        & 880\,Hz  & $0.52$ ($\approx 30^\circ$)  & $\approx +0.09$ & 弦の剛性によるわずかな先行 \\
+第3倍音        & 1320\,Hz & $2.62$ ($\approx 150^\circ$) & $\approx +0.31$ & 打弦位置による逆位相に近い反転 \\
+第4倍音        & 1760\,Hz & $4.19$ ($\approx 240^\circ$) & $\approx +0.37$ & 金属的なアタックの角の緩和 \\
+第5倍音        & 2200\,Hz & $1.05$ ($\approx 60^\circ$)  & $\approx +0.07$ & 高域のきらめき成分の分散 \\
+第6倍音        & 2640\,Hz & $5.24$ ($\approx 300^\circ$) & $\approx +0.31$ & 独立した空気感の付与 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{1秒経過後の累積的な時間ズレ}
+インハーモニシティ定数 $B = 0.0001$ としたとき、1.0秒間音が持続した時点での理論値からの周波数偏位と、それに伴う時間軸上での先行（未来への進み）は以下の通りである。
+\begin{itemize}
+    \item \textbf{第2倍音:} $+0.17\,\text{Hz}$ 偏位 $\rightarrow$ 1秒後には約 $0.2\,\text{ms}$ 分、位相が未来に進む。
+    \item \textbf{第3倍音:} $+0.60\,\text{Hz}$ 偏位 $\rightarrow$ 1秒後には約 $0.45\,\text{ms}$ 分、位相が未来に進む。
+    \item \textbf{第6倍音:} $+4.73\,\text{Hz}$ 偏位 $\rightarrow$ 1秒後には約 $1.8\,\text{ms}$ 分（波の周期約5回分）、位相が先へ進む。
+\end{itemize}
+この高速な「追い越し現象」が、ピアノの余韻に有機的な揺らぎを与える。
+
+---
+
+\section{Minimライブラリにおける実装}
+ProcessingのMinimライブラリが提供する \texttt{WavetableGenerator.gen7()} メソッドを用い、前節で設計した自然なグランドピアノ風の初期位相パラメータを固定ウェーブテーブルとして生成する実装例を以下に示す。
+
+\begin{lstlisting}[caption=WavetableGeneratorを用いたピアノ音色波形の生成]
+import ddf.minim.*;
+import ddf.minim.ugens.*;
+
+// 各倍音（基音〜第6倍音）の振幅設定
+float[] amplitudes = { 1.00f, 0.60f, 0.40f, 0.25f, 0.15f, 0.10f };
+
+// 物理的タイムラグに基づいた初期位相のラジアン設定
+float[] phases = { 0.00f, 0.52f, 2.62f, 4.19f, 1.05f, 5.24f };
+
+// 4096サンプルのウェーブテーブルを生成
+Wavetable pianoTable = WavetableGenerator.gen7(4096, amplitudes, phases);
+\end{lstlisting}
+
+\section{結論と発展的考察}
+すべての倍音の位相を $0.0$（同位相）で合成した場合、エネルギーが一瞬に集中するため「プチッ」とした不自然なデジタルノイズ（インパルス成分）が発生する。本レポートで提案した物理的根拠に基づく位相分散を行うことで、アタックの硬さが和らぎ、生楽器特有のふくよかな立ち上がりが再現される。
+
+なお、ウェーブテーブル合成の制約上、持続音（サスティン）における非調和的な位相の変化は固定化されてしまう。これを打破し、さらにリアルな余韻を追求するためには、生成したウェーブテーブルに対して、1\,Hz未満の微小なLFOをビブラートとして重畳させ、動的に位相関係を揺らす処理を組み合わせることが極めて有効である。
+
+\end{document}
