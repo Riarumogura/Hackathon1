@@ -1,0 +1,129 @@
+// ============================================================
+// Slave Arduino - ピアノ担当
+// MasterからI2C受信 → 演奏開始 → Serialで音符送信
+// ============================================================
+
+#include <Wire.h>
+
+#define SLAVE_ADDR        0x08   // 全Slave共通アドレス
+#define SERIAL_BAUD       9600
+#define DATA_SIZE         5
+#define MY_INSTRUMENT_ID  1      // 1=ピアノ, 2=木琴
+
+// startCountの定義（演奏順位→待機スロット数）
+#define COUNT_1ST   0
+#define COUNT_2ND   8
+
+// ベースオクターブ（楽譜データはoctave=4基準で作成）
+#define BASE_OCTAVE 4
+
+// ------------------------------------------------------------
+// 楽譜データ（もりのくまさん / ピアノ主旋律 / BPM120）
+// pitch    : MIDIノート番号（0 = 休符）※ octave=4基準
+// duration : 音符の長さ（ms）
+// startTime: 曲開始からの絶対発音タイミング（ms）
+// ------------------------------------------------------------
+const int SCORE_LENGTH = 29;
+
+const int pitch[] = {
+  0,  67, 69, 71, 72, 67, 64, 60, 69,
+  0,  69, 71, 69, 67, 65, 64, 62, 60,
+  0,  67, 66, 67, 64,  0,  0, 64, 63, 64, 50
+};
+
+const int duration[] = {
+  250, 250, 250, 250, 500, 500, 500, 500, 1000,
+  250, 250, 250, 250, 500, 500, 500, 500, 1000,
+  250, 250, 250, 250, 500, 500,
+  250, 250, 250, 250, 500, 500, 250
+};
+
+const int startTime[] = {
+     0,  250,  500,  750, 1000, 1500, 2000, 2500, 3000,
+  4000, 4250, 4500, 4750, 5000, 5500, 6000, 6500, 7000,
+  8000, 8250, 8500, 8750, 9000, 9500,
+  10000, 10250, 10500, 10750, 11000, 11500
+};
+
+// ------------------------------------------------------------
+// グローバル変数
+// ------------------------------------------------------------
+volatile byte rxData[DATA_SIZE];
+volatile bool dataReceived = false;
+
+bool          isPlaying     = false;
+int           scoreIndex    = 0;
+unsigned long playStartTime = 0;
+int           myStartCount  = -1;  // -1=演奏しない
+int           flashCount    = 0;
+int           currentOctave = BASE_OCTAVE;
+
+// ------------------------------------------------------------
+void setup() {
+  Wire.begin(SLAVE_ADDR);
+  Wire.onReceive(onReceive);
+  Serial.begin(SERIAL_BAUD);
+  Serial.println("Slave(Piano) ready");
+}
+
+void loop() {
+  if (dataReceived) {
+    dataReceived = false;
+
+    byte oct = rxData[1];
+    byte id1 = rxData[2];
+    byte id2 = rxData[3];
+
+    // オクターブ更新（byte値-1が実際のオクターブ：5→4）
+    currentOctave = (int)oct - 1;
+
+    // 自分のIDが何番目かでstartCountを設定
+    if      (id1 == MY_INSTRUMENT_ID) myStartCount = COUNT_1ST;
+    else if (id2 == MY_INSTRUMENT_ID) myStartCount = COUNT_2ND;
+    else                               myStartCount = -1;
+
+    // I2C受信カウントアップ（演奏トリガーとして使用）
+    flashCount++;
+
+    // startCountに達したら演奏開始
+    if (myStartCount >= 0 && !isPlaying && flashCount > myStartCount) {
+      isPlaying     = true;
+      scoreIndex    = 0;
+      playStartTime = millis();
+      Serial.println("START");
+    }
+  }
+
+  // 演奏中：startTimeを過ぎた音符をSerialへ送信
+  if (isPlaying && scoreIndex < SCORE_LENGTH) {
+    unsigned long elapsed = millis() - playStartTime;
+
+    if (elapsed >= (unsigned long)startTime[scoreIndex]) {
+      if (pitch[scoreIndex] != 0) {
+        // オクターブシフト
+        int shiftedPitch = pitch[scoreIndex] + (currentOctave - BASE_OCTAVE) * 12;
+        shiftedPitch = constrain(shiftedPitch, 0, 127);
+
+        Serial.print(shiftedPitch);
+        Serial.print(",");
+        Serial.println(duration[scoreIndex]);
+      }
+      scoreIndex++;
+
+      if (scoreIndex >= SCORE_LENGTH) {
+        isPlaying  = false;
+        flashCount = 0;
+        Serial.println("END");
+      }
+    }
+  }
+}
+
+void onReceive(int numBytes) {
+  if (numBytes == DATA_SIZE) {
+    for (int i = 0; i < DATA_SIZE; i++) rxData[i] = Wire.read();
+    dataReceived = true;
+  } else {
+    while (Wire.available()) Wire.read();
+  }
+}
