@@ -380,7 +380,7 @@ void sendParametersToMaster() {
   println("  └ BPM(下3桁)        : " + packet.substring(5, 8) + " (" + bpm + ")");
 
   if (isSerialConnected) {
-    myPort.write(packet); // 末尾に改行 \n を付与して送信
+    myPort.write(packet + "\n"); // 末尾に改行 \n を付与して送信
   } else {
     println("（シミュレーションモード）");
   }

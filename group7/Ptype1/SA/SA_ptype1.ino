@@ -7,7 +7,13 @@
 #define MY_I2C_ADDRESS    0      // この楽器のI2Cアドレス
 #define SERIAL_BAUD       9600
 #define BASE_OCTAVE       4      // 楽譜の基準オクターブ（国際式4）
-#define INST_ID 2                // ピアノ=1, 木琴＝2, フルート=3
+#define INST_ID 4                // ピアノ=1, 木琴＝2, フルート=3, ドラム=4
+
+// ドラム用定数（Drumslave_ver2.inoと同じ値）
+#define DRUM_HIHAT       2
+#define DRUM_SNARE       1
+#define DRUM_VEL_HIHAT   80
+#define DRUM_VEL_SNARE   110
 
 // ----------------------------------------------------------------------------
 // 楽譜データ（もりのくまさん / 主旋律＋対旋律 / 120bpm基準）
@@ -92,6 +98,7 @@ int startTick       = 0;      // 演奏を開始するTickの閾値
 int indexOffset      = -1;    // (i2cReceiveCount - startTick) からindexへの補正値
 int i2cReceiveCount = 0;      // I2Cでデータを受信した回数
 bool isPlaying      = false;
+bool drumNextIsHihat = true;  // ドラム(INST_ID==4)用：次に鳴らす音がハイハットかどうか
 
 void setup() {
   Serial.begin(SERIAL_BAUD);
@@ -103,7 +110,9 @@ void setup() {
     Serial.println("Slave(Mokkin) Ready.");
   } else if (INST_ID == 3) {
     Serial.println("Slave(Flute) Ready.");
-  } else{
+  } else if(INST_ID == 4){
+    Serial.println("Slave(Drum) Ready.");
+  }else{
     Serial.println("Warning! Invalid instrument!");
   }
 }
@@ -121,6 +130,12 @@ void loop() {
     // 【デバッグ出力】I2Cで受信した生の文字列と文字数をシリアルモニタに表示
     Serial.print("I2C: ");
     Serial.println(input);
+
+    // ドラム(INST_ID==4)は通常楽器と処理が完全に異なるため、専用関数に分岐する
+    if (INST_ID == 4) {
+      handleDrum(input);
+      return;
+    }
 
     // ========================================================================
     // 【判定1】初期設定データ（8桁）の受信
@@ -209,6 +224,46 @@ void loop() {
             }
           }
         }
+      }
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
+// ドラム専用処理（INST_ID==4 のときだけ呼び出される）
+// 出力フォーマットはDrumslave_ver2.inoと同じ "drumType,velocity,BPM"
+// ----------------------------------------------------------------------------
+void handleDrum(String input) {
+  // 【判定1】初期設定データ（8桁）の受信 → 演奏開始
+  if (input.length() == 8) {
+    i2cReceiveCount = 0;
+    isPlaying = true;
+    drumNextIsHihat = true;
+  }
+
+  // 【判定2】演奏中のBPMデータ（3桁）の受信 ＝ Tickカウント
+  else if (input.length() == 3) {
+    if (isPlaying) {
+      i2cReceiveCount++;
+      int tickCount = i2cReceiveCount - 1; // TickCountは0始まり
+
+      // TickCountが偶数のときだけ、ハイハットとスネアを交互に発音する
+      if (tickCount % 2 == 0) {
+        int drumType = drumNextIsHihat ? DRUM_HIHAT : DRUM_SNARE;
+        int velocity = drumNextIsHihat ? DRUM_VEL_HIHAT : DRUM_VEL_SNARE;
+
+        Serial.print(drumType);
+        Serial.print(",");
+        Serial.print(velocity);
+        Serial.print(",");
+        Serial.println(input);
+
+        drumNextIsHihat = !drumNextIsHihat;
+      }
+
+      // TickCountが97（i2cReceiveCountが98）になったら終了
+      if (tickCount == 97) {
+        isPlaying = false;
       }
     }
   }
