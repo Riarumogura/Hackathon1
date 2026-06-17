@@ -1,5 +1,5 @@
 // ============================================================================
-// Slave Arduino - 1台同時再生（主旋律＆対旋律 合致テスト・アドレス0版）
+// Slave Arduino - ピアノ担当
 // ============================================================================
 
 #include <Wire.h>
@@ -8,103 +8,61 @@
 #define BASE_OCTAVE       4      // 楽譜の基準オクターブ（国際式4）
 
 // ----------------------------------------------------------------------------
-// 主旋律（メイン）の楽譜データ
+// 楽譜データ（もりのくまさん / 120bpm基準）
+// 各行 = 1Tick分、[0]=既存の音、[1]=同時に重ねる音（現状は未使用のため全て0）
 // ----------------------------------------------------------------------------
-const int pitch_main[] = {
-  0, 67, 69, 71,
-  72, 0, 67, 0, 64, 0, 60, 0,
-  69, 0, 0, 0, 0, 69, 71, 69,
-  67, 0, 65, 0, 64, 0, 62, 0,
-  60, 0, 0, 0, 0, 67, 66, 67,
-  64, 0, 0, 0, 0, 64, 63, 64,
-  60, 0, 0, 0, 0, 64, 62, 60,
-  62, 0, 0, 0, 0, 67, 69, 67,
-  64, 0, 0, 0, 0, 67, 69, 71,
-  72, 0, 67, 0, 64, 0, 60, 0,
-  69, 0, 0, 0, 0, 69, 71, 69,
-  67, 0, 65, 0, 64, 0, 62, 0,
-  60, 0, 0, 0, 0, 0
+
+// メイン楽譜（1番手、および3番手が使用）
+const int pitch_main[][2] = {
+  {0,0}, {67,0}, {69,0}, {71,0}, {72,0}, {67,0}, {64,0}, {60,0}, {69,0},
+  {0,0}, {69,0}, {71,0}, {69,0}, {67,0}, {65,0}, {64,0}, {62,0}, {60,0},
+  {0,0}, {67,0}, {66,0}, {67,0}, {64,0}, {0,0}, {0,0}, {64,0}, {63,0}, {64,0}, {50,0}
+  // ※3番手の条件「要素番号65」等に対応できるよう、必要に応じてここに音符を足してください
+};
+const int duration_main[][2] = {
+  {250,0}, {250,0}, {250,0}, {250,0}, {500,0}, {500,0}, {500,0}, {500,0}, {1000,0},
+  {250,0}, {250,0}, {250,0}, {250,0}, {500,0}, {500,0}, {500,0}, {500,0}, {1000,0},
+  {250,0}, {250,0}, {250,0}, {250,0}, {500,0}, {500,0},
+  {250,0}, {250,0}, {250,0}, {250,0}, {500,0}, {500,0}, {250,0}
 };
 
-const int duration_main[] = {
-  0, 250, 250, 250,
-  500, 0, 500, 0, 500, 0, 500, 0, 
-  1000, 0, 0, 0, 0, 250, 250, 250,
-  500, 0, 500, 0, 500, 0, 500, 0,
-  1000, 0, 0, 0, 0, 250, 250, 250,
-  500, 0, 0, 0, 0, 250, 250, 250,
-  500, 0, 0, 0, 0, 250, 250, 250,
-  500, 0, 0, 0, 0, 250, 250, 250,
-  500, 0, 0, 0, 0, 250, 250, 250,
-  500, 0, 500, 0, 500, 0, 500, 0,
-  1000, 0, 0, 0, 0, 250, 250, 250,
-  500, 0, 500, 0, 500, 0, 500, 0,
-  1000, 0, 0, 0, 0, 0
+// サブ楽譜（2番手が使用）※中身は検証用に仮のものを置いています
+const int pitch_sub[][2] = {
+  {60,0}, {62,0}, {64,0}, {65,0}, {67,0}, {69,0}, {71,0}, {72,0}
+};
+const int duration_sub[][2] = {
+  {500,0}, {500,0}, {500,0}, {500,0}, {500,0}, {500,0}, {500,0}, {500,0}
 };
 
-// ----------------------------------------------------------------------------
-// 対旋律（サブ）の楽譜データ
-// ----------------------------------------------------------------------------
-const int pitch_sub[] = {
-  48, 0, 0, 0, 
-  48, 0, 0, 0, 48, 0, 0, 0, 
-  53, 0, 0, 0, 53, 0, 0, 0,
-  55, 0, 0, 0, 55, 0, 0, 0,
-  48, 0, 0, 0, 48, 0, 0, 0,
-  48, 0, 0, 0, 48, 0, 0, 0,
-  48, 0, 0, 0, 48, 0, 0, 0, 
-  55, 0, 0, 0, 55, 0, 0, 0, 
-  48, 0, 0, 0, 48, 0, 0, 0,
-  48, 0, 0, 0, 48, 0, 0, 0, 
-  53, 0, 0, 0, 53, 0, 0, 0, 
-  55, 0, 0, 0, 55, 0, 0, 0,
-  48, 0, 0, 0, 0, 0
-};
-
-const int duration_sub[] = {
-  1000, 0, 0, 0, 
-  1000, 0, 0, 0, 1000, 0, 0, 0, 
-  1000, 0, 0, 0, 1000, 0, 0, 0,
-  1000, 0, 0, 0, 1000, 0, 0, 0,
-  1000, 0, 0, 0, 1000, 0, 0, 0,
-  1000, 0, 0, 0, 1000, 0, 0, 0,
-  1000, 0, 0, 0, 1000, 0, 0, 0, 
-  1000, 0, 0, 0, 1000, 0, 0, 0, 
-  1000, 0, 0, 0, 1000, 0, 0, 0,
-  1000, 0, 0, 0, 1000, 0, 0, 0, 
-  1000, 0, 0, 0, 1000, 0, 0, 0, 
-  1000, 0, 0, 0, 1000, 0, 0, 0,
-  1000, 0, 0, 0, 0, 0
-};
-
-// それぞれの楽譜の長さを自動計算
-const int LENGTH_MAIN = sizeof(pitch_main) / sizeof(pitch_main[0]);
-const int LENGTH_SUB  = sizeof(pitch_sub) / sizeof(pitch_sub[0]);
+// 要素数の自動計算
+const int SCORE_LENGTH_MAIN = sizeof(pitch_main) / sizeof(pitch_main[0]);
+const int SCORE_LENGTH_SUB  = sizeof(pitch_sub) / sizeof(pitch_sub[0]);
 
 // ----------------------------------------------------------------------------
-// グローバル変数
+// グローバル変数（Uno R4対応）
 // ----------------------------------------------------------------------------
 volatile bool dataReceived = false;
 volatile char rxBuffer[16];           
 volatile int rxLength = 0;
 
-int receivedOctave  = 5;      
-int currentBPM      = 120;    
-int i2cReceiveCount = 0;      
+int receivedOctave  = 5;      // 受信したオクターブ値
+int myPlayOrder     = 1;      // 自分の演奏順
+int currentBPM      = 120;    // 現在のBPM
+int i2cReceiveCount = 0;      // I2Cでデータ（Tick）を受信した通算回数
 bool isPlaying      = false;
 
 void setup() {
   Serial.begin(SERIAL_BAUD);
-  
-  // ★【アドレス0】ブロードキャスト（ジェネラルコール）のアドレス0で初期化
+  // Master Arduinoは全Slaveへアドレス0（ブロードキャスト）で一斉送信するため、
+  // 個別アドレスではなくアドレス0で待ち受ける
   Wire.begin(0);
   Wire.onReceive(receiveEvent);
-  
-  Serial.println("Slave (Dual Play Test Mode Address:0) Ready.");
+  Serial.println("Slave(Piano) Ready.");
 }
 
 void loop() {
   if (dataReceived) {
+    // 割り込みバッファから通常のStringへ安全にコピー
     String input = "";
     noInterrupts();
     for(int i = 0; i < rxLength; i++) {
@@ -115,68 +73,143 @@ void loop() {
 
     input.trim();
 
-    // 1. 初期設定データ（8桁）を受け取ったら演奏フラグをON
+    // 【デバッグ出力】受信ログ
+    Serial.print("I2C Rx: [");
+    Serial.print(input);             
+    Serial.print("] (Len: ");
+    Serial.print(input.length());    
+    Serial.println(")");
+
+    // ========================================================================
+    // 【判定1】初期設定データ（8桁）の受信
+    // ========================================================================
     if (input.length() == 8) {
       receivedOctave = input.substring(0, 2).toInt();
+      myPlayOrder    = input.substring(2, 3).toInt(); // 演奏順
       currentBPM     = input.substring(5, 8).toInt();
+
       i2cReceiveCount = 0;
-      isPlaying = true;
-      Serial.println("--- Dual Test Play Started ---");
+      // 演奏順が 1, 2, 3 のいずれかであれば演奏に参加する
+      isPlaying = (myPlayOrder >= 1 && myPlayOrder <= 3);
+      
+      Serial.print("  -> Config parsed. Order:");
+      Serial.println(myPlayOrder);
     }
     
-    // 2. 演奏中のBPMデータ（3桁のTick信号）を受信したときの処理
+    // ========================================================================
+    // 【判定2】演奏中のBPMデータ（3桁）の受信 ＝ Tickカウント
+    // ========================================================================
     else if (input.length() == 3) {
       currentBPM = input.toInt();
       
       if (isPlaying) {
-        i2cReceiveCount++; // 1から始まる現在の通算Tick数
-        int index = i2cReceiveCount - 1; // 配列にアクセスするためのインデックス
-
-        bool mainFinished = (index >= LENGTH_MAIN);
-        bool subFinished  = (index >= LENGTH_SUB);
-
-        // 両方の楽譜を最後まで流し終えたら演奏終了
-        if (mainFinished && subFinished) {
-          isPlaying = false;
-          Serial.println("--- Dual Test Play Finished ---");
-          return;
-        }
-
-        // 共通のオクターブ計算用
-        int targetOctave = receivedOctave - 1;
+        i2cReceiveCount++; // Masterからの通算受信回数（＝現在の全体のTickCount）
+        
+        // 同時に鳴らす最大2音分（[0]=既存の音、[1]=重ねる音）
+        int targetPitch[2]    = {0, 0};
+        int targetDuration[2] = {0, 0};
+        bool hasNoteToPlay = false;
 
         // --------------------------------------------------------------------
-        // ① 主旋律（メイン）の音符送信処理
+        // パターン①：演奏順が 1 のとき（最初からメイン楽譜）
         // --------------------------------------------------------------------
-        if (!mainFinished && pitch_main[index] > 0) {
-          int shiftedPitch = pitch_main[index] + (targetOctave - BASE_OCTAVE) * 12;
-          shiftedPitch = constrain(shiftedPitch, 0, 127);
-          long calcDuration = (long)duration_main[index] * 120 / currentBPM;
-
-          // Processingへカンマ区切りで送信
-          Serial.print(shiftedPitch);
-          Serial.print(",");
-          Serial.println(calcDuration);
+        if (myPlayOrder == 1) {
+          int index = i2cReceiveCount - 1; // tickCount=1 のとき index=0
+          if (index < SCORE_LENGTH_MAIN) {
+            targetPitch[0]    = pitch_main[index][0];
+            targetPitch[1]    = pitch_main[index][1];
+            targetDuration[0] = duration_main[index][0];
+            targetDuration[1] = duration_main[index][1];
+            hasNoteToPlay = true;
+          } else {
+            isPlaying = false; // 楽譜終了
+          }
         }
 
         // --------------------------------------------------------------------
-        // ② 対旋律（サブ）の音符送信処理（主旋律のすぐ直後に連続送信して和音化）
+        // パターン②：演奏順が 2 のとき（最初からサブ楽譜）
         // --------------------------------------------------------------------
-        if (!subFinished && pitch_sub[index] > 0) {
-          int shiftedPitch = pitch_sub[index] + (targetOctave - BASE_OCTAVE) * 12;
-          shiftedPitch = constrain(shiftedPitch, 0, 127);
-          long calcDuration = (long)duration_sub[index] * 120 / currentBPM;
+        else if (myPlayOrder == 2) {
+          int index = i2cReceiveCount - 1; // tickCount=1 のとき index=0
+          if (index < SCORE_LENGTH_SUB) {
+            targetPitch[0]    = pitch_sub[index][0];
+            targetPitch[1]    = pitch_sub[index][1];
+            targetDuration[0] = duration_sub[index][0];
+            targetDuration[1] = duration_sub[index][1];
+            hasNoteToPlay = true;
+          } else {
+            isPlaying = false; // 楽譜終了
+          }
+        }
 
-          // Processingへカンマ区切りで送信
-          Serial.print(shiftedPitch);
-          Serial.print(",");
-          Serial.println(calcDuration);
+        // --------------------------------------------------------------------
+        // パターン③：演奏順が 3 のとき（変則ジャンプ演奏）
+        // --------------------------------------------------------------------
+        else if (myPlayOrder == 3) {
+
+          // 条件①＆②：TickCount=37〜65 のとき
+          if (i2cReceiveCount >= 37 && i2cReceiveCount < 66) {
+            // TickCount=37 のときに 要素番号33 を参照させるための計算
+            int index = 33 + (i2cReceiveCount - 37);
+
+            if (index < SCORE_LENGTH_MAIN) {
+              targetPitch[0]    = pitch_main[index][0];
+              targetPitch[1]    = pitch_main[index][1];
+              targetDuration[0] = duration_main[index][0];
+              targetDuration[1] = duration_main[index][1];
+              hasNoteToPlay = true;
+            }
+          }
+
+          // 条件③：TickCount=66〜98 のとき
+          else if (i2cReceiveCount >= 66 && i2cReceiveCount <= 98) {
+            // TickCount=66 のときに 要素番号65 を参照させるための計算
+            int index = 65 + (i2cReceiveCount - 66);
+
+            if (index < SCORE_LENGTH_MAIN) {
+              targetPitch[0]    = pitch_main[index][0];
+              targetPitch[1]    = pitch_main[index][1];
+              targetDuration[0] = duration_main[index][0];
+              targetDuration[1] = duration_main[index][1];
+              hasNoteToPlay = true;
+            }
+
+            if (i2cReceiveCount == 98) {
+              isPlaying = false; // 指定のTick98に達したので終了
+            }
+          }
+        }
+
+        // --------------------------------------------------------------------
+        // データ送信処理（休符=0でない音だけ、2音分それぞれProcessingへ送信）
+        // --------------------------------------------------------------------
+        if (hasNoteToPlay) {
+          int targetOctave = receivedOctave - 1;
+
+          for (int voice = 0; voice < 2; voice++) {
+            if (targetPitch[voice] > 0) {
+              // オクターブ補正
+              int shiftedPitch = targetPitch[voice] + (targetOctave - BASE_OCTAVE) * 12;
+              shiftedPitch = constrain(shiftedPitch, 0, 127);
+
+              // BPM補正
+              long calculatedDuration = (long)targetDuration[voice] * 120 / currentBPM;
+
+              // Processingへカンマ区切りで送信
+              Serial.print(shiftedPitch);
+              Serial.print(",");
+              Serial.println(calculatedDuration);
+            }
+          }
         }
       }
     }
   }
 }
 
+// ----------------------------------------------------------------------------
+// I2C受信割り込みイベント
+// ----------------------------------------------------------------------------
 void receiveEvent(int numBytes) {
   rxLength = 0;
   while (Wire.available() && rxLength < 15) {
