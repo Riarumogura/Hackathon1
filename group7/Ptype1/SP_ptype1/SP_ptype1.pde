@@ -88,7 +88,8 @@ void draw() {
 
 // ------------------------------------------------------------
 // Slave ArduinoからSerial受信
-// フォーマット："pitch,duration\n"（pitchはMIDIノート番号）
+// フォーマット："mainPitch,mainDuration,subPitch,subDuration\n"
+// （pitchはMIDIノート番号。0は休符で再生しない）
 // ------------------------------------------------------------
 void serialEvent(Serial p) {
   String line = trim(p.readStringUntil('\n'));
@@ -101,10 +102,17 @@ void serialEvent(Serial p) {
   }
 
   String[] parts = split(line, ',');
-  if (parts.length < 2) return;
+  if (parts.length < 4) return;
 
-  int midiNote = int(parts[0]);
-  float durSec = int(parts[1]) / 1000.0;  // ms → 秒
+  playVoice(int(parts[0]), int(parts[1])); // 主旋律
+  playVoice(int(parts[2]), int(parts[3])); // 対旋律
+}
+
+// 1音分（休符=0は再生しない）をピアノ音色で再生
+void playVoice(int midiNote, int durationMs) {
+  if (midiNote <= 0) return;
+
+  float durSec = durationMs / 1000.0;  // ms → 秒
 
   // MIDIノート番号 → 周波数
   float freq = 440.0 * pow(2.0, (midiNote - 69) / 12.0);
