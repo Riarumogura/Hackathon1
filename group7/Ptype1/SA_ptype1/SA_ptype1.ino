@@ -1,5 +1,5 @@
 // ============================================================================
-// Slave Arduino - ピアノ担当 (コンパイルエラー修正版)
+// Slave Arduino - 全楽器対応
 // ============================================================================
 
 #include <Wire.h>
@@ -7,9 +7,10 @@
 #define MY_I2C_ADDRESS    0      // この楽器のI2Cアドレス
 #define SERIAL_BAUD       9600
 #define BASE_OCTAVE       4      // 楽譜の基準オクターブ（国際式4）
+#define INST_ID 1                // ピアノ=1, 木琴＝2, フルート=3
 
 // ----------------------------------------------------------------------------
-// 楽譜データ（もりのくまさん / ピアノ主旋律 / 120bpm基準）
+// 楽譜データ（もりのくまさん / 主旋律 / 120bpm基準）
 // ----------------------------------------------------------------------------
 
 const int pitch[] = {
@@ -49,7 +50,8 @@ const int SCORE_LENGTH = sizeof(pitch) / sizeof(pitch[0]);
 // グローバル変数
 // ----------------------------------------------------------------------------
 volatile bool dataReceived = false;
-volatile String rxString   = ""; // 割り込み内で使うため volatile は維持
+volatile char rxBuffer[16];      // 割り込み内で受信データを保持するバッファ
+volatile int  rxLength    = 0;
 
 int receivedOctave  = 5;      // 受信したオクターブ値
 int myPlayOrder     = 1;      // 自分の演奏順
@@ -62,15 +64,26 @@ void setup() {
   Serial.begin(SERIAL_BAUD);
   Wire.begin(MY_I2C_ADDRESS);
   Wire.onReceive(receiveEvent);
-  Serial.println("Slave(Piano) Ready.");
+  if(INST_ID == 1) {
+    Serial.println("Slave(Piano) Ready.");
+  } else if (INST_ID == 2) {
+    Serial.println("Slave(Mokkin) Ready.");
+  } else if (INST_ID == 3) {
+    Serial.println("Slave(Flute) Ready.");
+  } else{
+    Serial.println("Warning! Invalid instrument!");
+  }
 }
 
 void loop() {
   if (dataReceived) {
-    // ★【重要】volatile変数の内容を、通常の String 変数にコピーして退避
-    // これにより、以降の String 操作や Serial.print でエラーが出なくなります
-    String input = String((const String&)rxString);
+    // 割り込みバッファの内容を、通常の String 変数にコピーして退避
+    String input = "";
+    for (int i = 0; i < rxLength; i++) {
+      input += (char)rxBuffer[i];
+    }
     dataReceived = false;
+    input.trim();
 
     // 【デバッグ出力】I2Cで受信した生の文字列と文字数をシリアルモニタに表示
     Serial.print("I2C: ");
@@ -81,7 +94,7 @@ void loop() {
     // ========================================================================
     if (input.length() == 8) {
       receivedOctave = input.substring(0, 2).toInt();
-      myPlayOrder = input.substring(2, 3).toInt(); // ピアノはインデックス2番目
+      myPlayOrder = input.substring(INST_ID + 1, INST_ID +2).toInt();
       currentBPM = input.substring(5, 8).toInt();
 
       if (myPlayOrder == 1) {
@@ -153,11 +166,10 @@ void loop() {
 // I2C受信割り込みイベント
 // ----------------------------------------------------------------------------
 void receiveEvent(int numBytes) {
-  rxString = "";
-  while (Wire.available()) {
-    char c = Wire.read();
-    rxString += c;
+  rxLength = 0;
+  while (Wire.available() && rxLength < (int)sizeof(rxBuffer) - 1) {
+    rxBuffer[rxLength] = Wire.read();
+    rxLength++;
   }
-  rxString.trim();
   dataReceived = true;
 }
