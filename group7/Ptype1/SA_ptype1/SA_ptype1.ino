@@ -7,7 +7,7 @@
 #define MY_I2C_ADDRESS    0      // この楽器のI2Cアドレス
 #define SERIAL_BAUD       9600
 #define BASE_OCTAVE       4      // 楽譜の基準オクターブ（国際式4）
-#define INST_ID 1                // ピアノ=1, 木琴＝2, フルート=3
+#define INST_ID 2                // ピアノ=1, 木琴＝2, フルート=3
 
 // ----------------------------------------------------------------------------
 // 楽譜データ（もりのくまさん / 主旋律 / 120bpm基準）
@@ -54,9 +54,10 @@ volatile char rxBuffer[16];      // 割り込み内で受信データを保持�
 volatile int  rxLength    = 0;
 
 int receivedOctave  = 5;      // 受信したオクターブ値
-int myPlayOrder     = 1;      // 自分の演奏順
+int myPlayOrder     = 1;      // 自分の演奏順（初期設定データ受信で上書きされる）
 int currentBPM      = 120;    // 現在のBPM
 int startTick       = 0;      // 演奏を開始するTickの閾値
+int indexOffset      = -1;    // (i2cReceiveCount - startTick) からindexへの補正値
 int i2cReceiveCount = 0;      // I2Cでデータを受信した回数
 bool isPlaying      = false;
 
@@ -99,10 +100,13 @@ void loop() {
 
       if (myPlayOrder == 1) {
         startTick = 0;
+        indexOffset = -1;
       } else if (myPlayOrder == 2 || myPlayOrder == 3) {
         startTick = 37;
+        indexOffset = 32;  // TickCount==38(tickCount=1)で33要素目から始まる
       } else {
         startTick = -1;
+        indexOffset = 0;
       }
 
       i2cReceiveCount = 0;
@@ -129,8 +133,13 @@ void loop() {
         i2cReceiveCount++;
 
         if (i2cReceiveCount > startTick) {
-          int tickCount = i2cReceiveCount - startTick;
-          int index = tickCount - 1;
+          int index = (i2cReceiveCount - startTick) + indexOffset;
+
+          // myPlayOrderが2,3のときはTickCount=66（myPlayOrder==1が65要素目を演奏する
+          // タイミング）から、myPlayOrder==1と同じ進行に合流する
+          if ((myPlayOrder == 2 || myPlayOrder == 3) && i2cReceiveCount >= 66) {
+            index = i2cReceiveCount - 1;
+          }
 
           if (index < SCORE_LENGTH) {
             // ① pitchのオクターブ変更処理
