@@ -1,22 +1,34 @@
+// ============================================================
+// MA_ptype1.ino - Master Arduino（演奏制御の親機）
+// Processingから初期設定（8桁）とBPM同期（3桁）をSerialで受信し，
+// I2Cで全Slaveへブロードキャストしながら全98Tick分のテンポを管理する。
+// ============================================================
+
 #include <Wire.h>
 
+// ------------------------------------------------------------
+// 定数定義
+// ------------------------------------------------------------
 #define SERIAL_BAUND 9600
 #define MAX_BPM 180
 #define MIN_BPM 30
 
 // 全Slave共通のI2Cアドレス（擬似ブロードキャスト用）。
-// アドレス0（General Call）はWireライブラリ標準APIでは有効化できず、
+// アドレス0（General Call）はWireライブラリ標準APIでは有効化できず，
 // Uno R4ではNACK時に約1秒の遅延が発生するため使用しない。
 #define SLAVE_BROADCAST_ADDRESS 0
 
-int currentBPM = 0;
-int tickCount = 0;
-bool playing = false;
+// ------------------------------------------------------------
+// グローバル変数
+// ------------------------------------------------------------
+int currentBPM = 0;      // 現在のBPM（30〜180）
+int tickCount = 0;       // 送信済みTick数（1〜98）
+bool playing = false;    // 演奏中フラグ
 
-unsigned long waitStart = 0;
-unsigned long waitMs = 0;
-bool waiting = false;
-bool finishWaiting = false;
+unsigned long waitStart = 0;      // 現在の待機タイマーの開始時刻（millis）
+unsigned long waitMs = 0;         // 現在の待機タイマーの長さ（ms）
+bool waiting = false;             // 通常待機タイマー作動中フラグ
+bool finishWaiting = false;       // 最終待機（音の消音待ち）フラグ
 
 // Serial受信用バッファ（ブロッキングするreadStringUntilは使わない）
 char rxBuf[16];
@@ -28,6 +40,9 @@ void setup() {
   Serial.println("Master Arduino Ready");
 }
 
+// ------------------------------------------------------------
+// Processingからの受信データを解析し，演奏開始やBPM更新を行う
+// ------------------------------------------------------------
 void handleInput(const String &rawInput) {
   String input = rawInput;
   input.trim();
@@ -39,7 +54,7 @@ void handleInput(const String &rawInput) {
     currentBPM = bpmStr.toInt();
 
     if (currentBPM >= MIN_BPM && currentBPM <= MAX_BPM) {
-      // I2Cを使って、全Slaveへ8桁の文字列をそのまま一斉送信
+      // I2Cを使って，全Slaveへ8桁の文字列をそのまま一斉送信
       Wire.beginTransmission(SLAVE_BROADCAST_ADDRESS);
       Wire.print(input);
       Wire.endTransmission();
@@ -54,7 +69,7 @@ void handleInput(const String &rawInput) {
       waiting = true;          // タイマー作動開始
       finishWaiting = false;
 
-      // 小数の切り捨てを防ぐため、先に30000を掛け算する
+      // 小数の切り捨てを防ぐため，先に30000を掛け算する
       waitMs = 30000UL / (unsigned long)currentBPM;
       waitStart = millis();
     }
@@ -65,7 +80,7 @@ void handleInput(const String &rawInput) {
     int newBPM = input.toInt();
     if (newBPM >= MIN_BPM && newBPM <= MAX_BPM) {
 
-      // ★【ここを修正】演奏中かつ通常待機中の場合、タイマーの「残り時間」を計算し直す
+      // 演奏中かつ通常待機中の場合，タイマーの「残り時間」を新しいBPMに合わせて再計算する
       if (playing && waiting && !finishWaiting) {
         unsigned long elapsed = millis() - waitStart; // 現在のTickが始まってからの経過時間
 
@@ -79,12 +94,12 @@ void handleInput(const String &rawInput) {
         // 新しいBPM基準での「1Tickの合計時間」を再計算
         waitMs = 30000UL / (unsigned long)currentBPM;
 
-        // 進捗率に合わせて、新しいwaitStart（仮想的な開始時間）を逆算して補正
+        // 進捗率に合わせて，新しいwaitStart（仮想的な開始時間）を逆算して補正
         // これにより「現在のTickの残りの長さ」が新しいBPMのテンポに伸縮します
         waitStart = millis() - (unsigned long)((double)waitMs * progress);
 
       } else {
-        // 演奏前、または最終待機中の場合は単にBPMの値を更新
+        // 演奏前，または最終待機中の場合は単にBPMの値を更新
         currentBPM = newBPM;
       }
 
@@ -100,10 +115,13 @@ void handleInput(const String &rawInput) {
   }
 }
 
+// ------------------------------------------------------------
+// メインループ（Serial受信処理 ＋ Tick送信タイマー）
+// ------------------------------------------------------------
 void loop() {
 
-  // Processingからのシリアルデータを、ブロッキングせずに1バイトずつ読み進める。
-  // readStringUntil()は改行が来るまで最大1000ms待ってしまい、ノイズ等で
+  // Processingからのシリアルデータを，ブロッキングせずに1バイトずつ読み進める。
+  // readStringUntil()は改行が来るまで最大1000ms待ってしまい，ノイズ等で
   // 不完全なバイトが混入するとTick送信タイマー全体が止まってしまうため使わない。
   while (Serial.available() > 0) {
     char c = Serial.read();
@@ -119,14 +137,14 @@ void loop() {
   // 通常待機タイマー（30 / BPM * 1000 ms 分きっちり待つ処理）
   if (playing && waiting && !finishWaiting) {
     if (millis() - waitStart >= waitMs) {
-      // 待機時間が経過したので、一旦フラグをクリア
+      // 待機時間が経過したので，一旦フラグをクリア
       waiting = false; 
 
       if (tickCount >= 98) {
         // 98回目の待機が完了 ➔ 最終待機へ移行
         finishWaiting = true;
         
-        // 30000を先にする計算式に修正
+        // 小数の切り捨てを防ぐため，先に30000を掛け算してから割る
         waitMs = (30000UL / (unsigned long)currentBPM) + 500UL;
         waitStart = millis();
         Serial.print("[Finish Wait] ");
