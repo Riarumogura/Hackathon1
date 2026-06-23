@@ -50,8 +50,8 @@
 \section{進捗サマリー（要約）}
 
 \begin{itemize}
-    \item \textbf{全体進捗率：}主旋律・対旋律の同時演奏とドラム機能の追加が完了し、I2C／Serial通信の不具合修正も完了。マスター側（MA/MP）の再編はメンバーが別途対応中。
-    \item \textbf{マイルストーン達成状況：}達成（Slave Arduino・Slave Processingの主要機能追加分）
+    \item \textbf{全体進捗率：}Ptype2でSA／SPの和音対応・演奏順不具合修正・中級アレンジ譜への更新が完了し、Ptype3として16分音符単位のTick送信方式への移行（整合性修正）も完了。実機書き込み・通し演奏での最終検証が残っている。
+    \item \textbf{マイルストーン達成状況：}達成（Slave Arduino・Slave Processingの主要機能追加分、Ptype3でのTick解像度変更分）
     \item \textbf{主要成果：}
     \begin{itemize}
         \item SA\_ptype1.ino のコンパイルエラー（配列リファクタの不整合、UNO R4 WiFiでの volatile String 起因エラー）を特定・修正
@@ -59,11 +59,16 @@
         \item SA に myPlayOrder==4（ドラム）の発音ロジックを追加。ハイハット／スネアを偶数Tickごとに交互発音
         \item DrumProcessing\_new.pde を新しいSA仕様に合わせて修正し、未インストールライブラリ（processing.sound）依存とAPI誤用（Noise.setAmplitude）を解消
         \item ファイル構成をMA/MP1・MP2/SA/SP\_Piano・SP\_Drumに再編し、GitHubへpush
+        \item Ptype2のSA楽譜配列を「主旋律1音」から「主旋律・対旋律それぞれ最大3音の和音」対応の二次元配列に拡張し、送信フォーマットを4値（音階0,1,2,音の長さ）に変更
+        \item MP1/MP2/else.MP\_ptype2のinstNames順序不一致（木琴とフルートの演奏順が入れ替わって送信される不具合）を特定・修正
+        \item もりのくまさん中級アレンジ譜（gakuhu\_tyukyu.pdf）の全13小節を採譜し、SAの楽譜配列を\texttt{pitch\_to}/\texttt{pitch\_he}（104要素）に全面更新
+        \item Ptype3を作成し、楽譜解像度を8分音符基準から16分音符基準（208要素）へ拡張した上で、MA/SA/SP\_DrumのTick送信間隔・演奏順の開始・合流タイミング・ドラム発音間隔・総発音数を整合させる修正を実施
     \end{itemize}
     \item \textbf{重大課題（影響度：高）：}
     \begin{itemize}
         \item ローカル環境にarduino-cli等のコンパイラがなく、Claude Codeでの修正はコードレビューのみで実機・実コンパイル未検証
         \item MA/MP側（Master Arduino／Processing）はメンバーが独自に大幅改修中で、SA/SPとのプロトコル整合性は未確認
+        \item ピアノ実機ボードのINST\_ID設定が誤っている可能性（演奏順1番手で送信しているにもかかわらず輪奏部分を演奏する現象）を特定したが、実機側の\texttt{\#define INST\_ID}値の確認・修正はユーザー側作業として未対応
     \end{itemize}
 \end{itemize}
 
@@ -75,7 +80,8 @@
 
 \subsection{SA\_ptype1.ino のコンパイルエラー修正}
 \noindent
-作業日時：2026-06-18 \quad 状態：完了 \quad 進捗率：100\%
+作業日時：2026年6月18日 \quad 作業時間；4時間
+状態：完了 \quad 進捗率：100\%
 
 \noindent
 \textbf{依存関係・ブロッカー：}なし
@@ -96,7 +102,8 @@ RenesasコアのStringクラスにはvolatile修飾のメンバ関数が無い�
 
 \subsection{演奏順（myPlayOrder）ごとの開始位置・合流ロジックの調整}
 \noindent
-作業日時：2026-06-18 \quad 状態：完了 \quad 進捗率：100\%
+作業日時：2026年6月18日 \quad 作業時間：2時間
+状態：完了 \quad 進捗率：100\%
 
 \noindent
 \textbf{依存関係・ブロッカー：}なし
@@ -111,7 +118,8 @@ myPlayOrder==2,3 が演奏を開始するTickと、楽譜上のどの要素目�
 
 \subsection{主旋律・対旋律の同時演奏機能の追加（SA／SP）}
 \noindent
-作業日時：2026-06-18 \quad 状態：完了 \quad 進捗率：100\%
+作業日時：2026年6月18日 \quad 作業時間：2時間
+状態：完了 \quad 進捗率：100\%
 
 \noindent
 \textbf{依存関係・ブロッカー：}対旋律データは過去にrevertされたコミット（対旋律の楽譜を作成）の
@@ -128,7 +136,8 @@ SP\_ptype1.pde（現SP\_Piano）側は \texttt{playVoice()} を追加し、2音�
 
 \subsection{ドラム機能（myPlayOrder==4 / INST\_ID==4）の追加}
 \noindent
-作業日時：2026-06-18 \quad 状態：完了 \quad 進捗率：100\%
+作業日時：2026年6月18日 \quad 作業時間：1時間
+状態：完了 \quad 進捗率：100\%
 
 \noindent
 \textbf{依存関係・ブロッカー：}既存の \texttt{Drumslave\_ver2.ino} を参考実装として利用
@@ -172,9 +181,30 @@ SA\_ptype1.ino に \texttt{handleDrum()} を追加し、INST\_ID==4のときだ�
     \texttt{new Noise(amplitude, Noise.Tint.WHITE)}の形に修正して解消。
 \end{itemize}
 
-\subsection{ファイル構成の再編とGitHubへの反映}
+\subsection{SA／SPの楽譜構造を和音対応の二次元配列化し、送信フォーマットを4値に拡張}
 \noindent
-作業日時：2026-06-18 \quad 状態：完了 \quad 進捗率：100\%
+作業日時：2026年6月23日 \quad 作業時間：4時間
+状態：完了 \quad 進捗率：100\%
+
+\noindent
+\textbf{依存関係・ブロッカー：}対旋律(\texttt{pitch\_sub}/\texttt{duration\_sub})の実データは、過去にrevertされたコミット（対旋律の楽譜を作成）のものを復元して使用
+
+\noindent
+\textbf{作業内容：}
+
+AIに楽譜画像をpdf形式で渡し、画像解析によって得た楽譜のmidi番号や持続時間を配列として作成してもらった。
+実際には楽譜仕様通りの演奏を行うことができなかったため、独自に新しく2次元楽譜配列を作成した。
+SAの楽譜配列を「主旋律1音のみ」の1次元配列から、主旋律\texttt{pitch\_main}・対旋律\texttt{pitch\_sub}それぞれが1要素につき最大3音を持つ二次元配列に拡張。
+音の長さ配列（\texttt{duration\_main}/\texttt{duration\_sub}）は1次元のまま維持した。
+myPlayOrder==1,2,3のときのシリアル送信フォーマットを、主旋律・対旋律をそれぞれ別行で
+「音階0,音階1,音階2,音の長さ」の4値に変更（myPlayOrder==4は変更なし）。
+SP\_Piano/SP\_Mokkin/SP\_flute側の\texttt{serialEvent()}を4値パースに対応させ、
+受信した最大3音（0は休符）を同じdurationで同時発音するように修正した。
+
+\subsection{Tick送信を8分音符基準から16分音符基準への変更}
+\noindent
+作業日時：2026年6月24日 \quad 作業時間：3時間
+状態：完了（実機検証は未実施） \quad 進捗率：100\%（コード変更分）
 
 \noindent
 \textbf{依存関係・ブロッカー：}なし
@@ -182,10 +212,21 @@ SA\_ptype1.ino に \texttt{handleDrum()} を追加し、INST\_ID==4のときだ�
 \noindent
 \textbf{作業内容：}
 
-\texttt{MA\_ptype1}/\texttt{MP\_ptype1}/\texttt{SA\_ptype1}/\texttt{SP\_ptype1} を
-\texttt{MA}/\texttt{MP}/\texttt{SA}/\texttt{SP} 配下に再編。
-\texttt{MP}は\texttt{MP1}/\texttt{MP2}、\texttt{SP}は\texttt{SP\_Piano\_ptype1}/\texttt{SP\_Drum}に分割。
-Gitのリネーム検知により差分を最小化した上でコミット・pushを実施。
+楽譜の解像度が8分音符単位から16分音符単位（104→208要素）に変更されたことに合わせて、
+演奏システム全体の整合性を取るための修正を実施した。
+\begin{itemize}
+    \item \texttt{MA\_ptype1.ino}：Tick送信間隔の計算式\texttt{30000UL/BPM}（8分音符のms）を
+    \texttt{15000UL/BPM}（16分音符のms）に変更（初期設定・BPM同期・通常送信の計3箇所＋最終待機の1箇所）。
+    Tick終了判定を\texttt{tickCount>=104}から\texttt{tickCount>=208}に変更。
+    \item \texttt{SA\_ptype2.ino}：myPlayOrder==2,3の演奏開始位置を新しいタイミング（tickCount=83で楽譜75要素目から開始、tickCount=139で138要素目に合流）に合わせて
+    \texttt{startTick=37→82}, \texttt{indexOffset=32→74}、合流条件を\texttt{i2cReceiveCount>=66→>=139}に変更。
+    ドラム専用処理（\texttt{handleDrum()}）はTickが2倍速くなった分、従来と同じ実時間での
+    ハイハット／スネア交互発音間隔（4分音符ごと）を保つため判定を\texttt{\%2==0→\%4==0}に変更し、
+    終了判定を\texttt{tickCount==103→207}に変更。
+\end{itemize}
+変更後、myPlayOrder==1/2,3・ドラムの境界Tick値（83, 138, 139, 207, 208等）について
+index計算を手計算でトレースし、オーバーラン・ズレが無いことを机上で確認した。
+実機への書き込み・Processing起動・通しでの演奏確認は未実施。
 
 % ===== セクション3: 課題管理 =====
 \section{課題管理}
@@ -198,8 +239,7 @@ Gitのリネーム検知により差分を最小化した上でコミット・pu
         \toprule
         課題 & 発生原因 & 影響度 & 優先度 & 対策 & 期限 & 状態 \\
         \midrule
-        実機・コンパイル未検証 & ローカルにarduino-cli等が無い & 高 & 高 & 実機でのアップロード確認 & 未定 & 未対応 \\
-        MA/MPとの整合性未確認 & MA/MPはメンバーが別途大幅改修中 & 中 & 中 & 結合テストで送受信フォーマットを再確認 & 未定 & 未対応 \\
+        楽器ごとの音量比設定 & 同一PC、複数Processingでの結合テスト & 中 & 中 & 1つの楽器につき1つのPCを使用する & 次回授業 & 未達成 \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -213,7 +253,7 @@ Gitのリネーム検知により差分を最小化した上でコミット・pu
 \subsection{利用内容}
 
 \begin{itemize}
-    \item \textbf{利用目的：}デバッグ（コンパイルエラー原因特定）／実装（主旋律・対旋律同時演奏、ドラム機能追加）／レビュー（Processing側ライブラリ・API不整合の修正）
+    \item \textbf{利用目的：}デバッグ（コンパイルエラー・演奏順不具合の原因特定）／実装（主旋律・対旋律の和音対応、楽譜の全面更新、ドラム機能追加、Tick解像度変更）／レビュー（Processing側ライブラリ・API不整合の修正、MP間の楽器順序整合性確認）
     \item \textbf{入力（プロンプト要旨）：}
     \begin{itemize}
         \item 修正前後のSA\_ptype1.inoの差分を提示し、問題点と原因の特定を依頼
@@ -221,6 +261,7 @@ Gitのリネーム検知により差分を最小化した上でコミット・pu
         \item 「myPlayOrder==2,3を1番手の進行に65要素目で合流させたい」等、楽譜進行の仕様変更を自然言語で指示
         \item 「主旋律と対旋律を同時に演奏するようにSA・SPを変更せよ」「Drumslave\_ver2.inoを参考にmyPlayOrder==4のドラム機能を追加せよ」という要件付きの実装依頼
         \item Processing実行時のエラーメッセージ（ライブラリ未検出、メソッド不存在）をそのまま提示し修正を依頼
+        \item 楽譜構造および送信データ形式変更に伴うシステム全体の整合性修正
     \end{itemize}
     \item \textbf{出力概要：}
     \begin{itemize}
@@ -228,6 +269,7 @@ Gitのリネーム検知により差分を最小化した上でコミット・pu
         \item SA/SPのシリアル通信フォーマットを4値・3値に拡張する実装
         \item INST\_ID==4専用のドラム発音ロジック（handleDrum関数）
         \item processing.sound依存をddf.minimに置き換えたDrumProcessing\_new.pde
+        \item Tick送信間隔・myPlayOrder開始・合流タイミング・ドラム発音間隔の修正コード
     \end{itemize}
 \end{itemize}
 
@@ -236,17 +278,10 @@ Gitのリネーム検知により差分を最小化した上でコミット・pu
 {\small ※第三者が再現できるレベルで記述}
 
 \begin{itemize}
-    \item \textbf{検証手法：}コードレビュー（差分確認・ロジックの手計算によるTick/Index対応確認）。実機・Arduino IDE上でのコンパイル確認はarduino-cli等が無いため未実施。
-    \item \textbf{参照資料：}
-    \begin{itemize}
-        \item リポジトリ内の既存実装（Drumslave\_ver2.ino, DrumProcessing\_new.pde, SP\_ptype1.pde）
-        \item Arduino Renesasコアのコンパイルエラーメッセージ／Processing実行時エラーメッセージ
-    \end{itemize}
+    \item \textbf{検証手法：}実機での回路作成・結合テスト
     \item \textbf{検証手順：}
     \begin{enumerate}
-        \item 要件（Tick数・要素番号・出力フォーマット等）を数式で書き出し、実装後のindex計算が要件と一致するか手計算で確認
-        \item ユーザーから提示された実際のコンパイル／実行時エラーメッセージに対して、該当箇所のAPI仕様（Renesas String, Minim Noiseクラス等）を確認し修正
-        \item ユーザーが実機・実行環境で再テストし、結果（エラー解消／要望との不一致）をフィードバックしてもらう形で反復修正
+        \item 実機・実行環境でテストを行い、実際の動作やエラーコードを確認
     \end{enumerate}
 \end{itemize}
 
@@ -255,17 +290,16 @@ Gitのリネーム検知により差分を最小化した上でコミット・pu
 \begin{itemize}
     \item \textbf{一致点：}
     \begin{itemize}
-        \item Minimの\texttt{Noise}クラスがコンストラクタ引数で振幅を取り、\texttt{setAmplitude()}を持たないという挙動はユーザー報告のコンパイルエラーと一致
-        \item RenesasコアのStringクラスがvolatile修飾メンバ関数を持たない点はAVRコアとの差異として実際のエラーメッセージと一致
+        \item 自分で設定した演奏順ごとの楽譜再生位置を基にAIが作成したコードでは、もりのくまさんの楽譜仕様通りの輪奏を行うことができた。
     \end{itemize}
     \item \textbf{不一致・疑義：}
     \begin{itemize}
-        \item 76→81要素スキップ等、要件が反復的に変更されたため、最終的に採用されなかった中間実装が複数発生（コミットメッセージには最終状態のみ記載し、廃止された内容は記述していない）
+        \item AIが作成した楽譜では、もりのくまさんとして演奏することができなかった。
     \end{itemize}
-    \item \textbf{最終判断：}採用（提示された各エラーメッセージに対する修正はすべてユーザー環境で解消確認済みと推定。ただし実機での最終動作確認は未実施）
+    \item \textbf{最終判断：}大枠はAIが作成したコードを採用し、適宜個人で修正を行なった。楽譜に関してはAIの出力は採用せず、全て個人で作成した。
     \item \textbf{根拠：}
     \begin{itemize}
-        \item ユーザーからの追加エラー報告が、修正のたびに別の具体的なエラーメッセージに変化しており、前の修正が該当エラーを解消したことを示唆している
+        \item 機能や関数ごとにAIの出力を実機でのテストを行い、意図通りの動作をすること確認できた。AIの出力した楽譜では、音階や再生する音の数が異なり、意図通りの演奏ができなかったこと。
     \end{itemize}
 \end{itemize}
 
@@ -276,33 +310,25 @@ Gitのリネーム検知により差分を最小化した上でコミット・pu
     \item \textbf{目標：}
     \begin{itemize}
         \item 実機（Arduino UNO R4 WiFi×複数台、PC上のProcessing）でMA/MP/SA/SPを結合し、主旋律・対旋律・ドラムを含む全体演奏を通しで確認する
-        \item MA/MP側の独自改修（非ブロッキングSerial受信化等）とSA/SPのプロトコルの整合性を確認する
+        \item 楽器Arduino一つにつき一台のPC（Processing）を使用したテストを行うことで、楽器ごとの適切な音量比を設定する。
     \end{itemize}
     \item \textbf{達成基準：}
     \begin{itemize}
-        \item 楽曲（もりのくまさん）が冒頭から終端まで、ピアノ（主旋律＋対旋律）とドラムが破綻なく同時再生される
+        \item もりのくまさんの楽曲が冒頭から終端まで、ピアノ・木琴・フルート（主旋律＋対旋律）とドラムが破綻なく同時再生される
+        \item 各楽器の適切な音量比を確定させる。
     \end{itemize}
-    \item \textbf{期限：}未定
+    \item \textbf{期限：}次回授業
 \end{itemize}
 
 % ===== セクション6: その他 =====
 \section{その他}
 
-\begin{itemize}
-    \item 作業ログ本ファイル（\texttt{tasklog\_temp.tex}）はGitHubへのpush対象から除外する運用とする
-    \item PDFへのコンパイルは指示があるまで行わない
-\end{itemize}
+なし
 
 % ===== セクション7: 付録 =====
 \section{付録}
 
-\begin{itemize}
-    \item \textbf{添付資料：}
-    \begin{itemize}
-        \item ソースコード：\texttt{group7/Ptype1/SA/SA\_ptype1.ino}, \texttt{group7/Ptype1/SP/SP\_Piano\_ptype1/SP\_Piano.pde}, \texttt{group7/Ptype1/SP/SP\_Drum/SP\_Drum\_ptype1.pde}
-        \item 回路図／設計図：なし
-    \end{itemize}
-    \item \textbf{添付範囲：}差分（本ログ記載の各作業項目に対応するコミットの差分）
-\end{itemize}
+\textbf{GitHubリポジトリ}
+https://github.com/Riarumogura/Hackathon1/tree/main/group7
 
 \end{document}

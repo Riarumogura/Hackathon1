@@ -54,8 +54,8 @@ void handleInput(const String &rawInput) {
       waiting = true;          // タイマー作動開始
       finishWaiting = false;
 
-      // 小数の切り捨てを防ぐため、先に30000を掛け算する
-      waitMs = 30000UL / (unsigned long)currentBPM;
+      // 小数の切り捨てを防ぐため、先に15000を掛け算する
+      waitMs = 15000UL / (unsigned long)currentBPM;
       waitStart = millis();
     }
   }
@@ -77,7 +77,7 @@ void handleInput(const String &rawInput) {
         currentBPM = newBPM;
 
         // 新しいBPM基準での「1Tickの合計時間」を再計算
-        waitMs = 30000UL / (unsigned long)currentBPM;
+        waitMs = 15000UL / (unsigned long)currentBPM;
 
         // 進捗率に合わせて、新しいwaitStart（仮想的な開始時間）を逆算して補正
         // これにより「現在のTickの残りの長さ」が新しいBPMのテンポに伸縮します
@@ -122,19 +122,19 @@ void loop() {
       // 待機時間が経過したので、一旦フラグをクリア
       waiting = false; 
 
-      if (tickCount >= 104) {
-        // 104回目の待機が完了 ➔ 最終待機へ移行
+      if (tickCount >= 208) {
+        // 208回目の待機が完了 ➔ 最終待機へ移行
         finishWaiting = true;
-        
-        // 30000を先にする計算式に修正
-        waitMs = (30000UL / (unsigned long)currentBPM) + 500UL;
+
+        // 15000を先にする計算式に修正
+        waitMs = (15000UL / (unsigned long)currentBPM) + 500UL;
         waitStart = millis();
         Serial.print("[Finish Wait] ");
         Serial.print(waitMs);
         Serial.println(" ms");
 
       } else {
-        // まだ 104回に達していない場合：次のBPM（Tick）を送信
+        // まだ 208回に達していない場合：次のBPM（Tick）を送信
         tickCount++;
         char sendBpmStr[4];
         sprintf(sendBpmStr, "%03d", currentBPM);
@@ -150,8 +150,8 @@ void loop() {
         Serial.println(tickCount);
 
         // 次の送信までの待機タイマーをここでもう一度ONにする
-        waiting = true; 
-        waitMs = 30000UL / (unsigned long)currentBPM;
+        waiting = true;
+        waitMs = 15000UL / (unsigned long)currentBPM;
         waitStart = millis();
       }
     }
