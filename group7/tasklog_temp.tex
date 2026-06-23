@@ -1,0 +1,308 @@
+\documentclass[uplatex,dvipdfmx]{jlreq}
+\usepackage{jlreq-deluxe}
+\usepackage[noalphabet]{pxchfon}
+\usepackage{stix2}
+\usepackage[fleqn,tbtags]{mathtools}
+\usepackage{hira-stix}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{siunitx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage[hyphens]{url}
+\usepackage{array}
+\usepackage{longtable}
+
+% ===== コードリスト設定（必要に応じて変更） =====
+\lstset{
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue}\bfseries,
+    commentstyle=\color{gray}\itshape,
+    stringstyle=\color{orange},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    stepnumber=1,
+    numbersep=10pt,
+    frame=single,
+    frameround=tttt,
+    breaklines=true,
+    breakatwhitespace=true,
+    tabsize=2,
+    captionpos=b,
+    showstringspaces=false
+}
+
+\begin{document}
+
+% ===== ヘッダー情報 =====
+\title{\textbf{第6週目事前課題 作業ログ}}
+\author{25G1144 脇阪隼人}
+\date{\today}
+\maketitle
+
+\noindent
+\textbf{Arduinoオーケストラ}
+
+\bigskip
+
+% ===== セクション1: 進捗サマリー =====
+\section{進捗サマリー（要約）}
+
+\begin{itemize}
+    \item \textbf{全体進捗率：}主旋律・対旋律の同時演奏とドラム機能の追加が完了し、I2C／Serial通信の不具合修正も完了。マスター側（MA/MP）の再編はメンバーが別途対応中。
+    \item \textbf{マイルストーン達成状況：}達成（Slave Arduino・Slave Processingの主要機能追加分）
+    \item \textbf{主要成果：}
+    \begin{itemize}
+        \item SA\_ptype1.ino のコンパイルエラー（配列リファクタの不整合、UNO R4 WiFiでの volatile String 起因エラー）を特定・修正
+        \item SA／SPで主旋律と対旋律を同時演奏できる機能を追加（4値シリアル送信＋Minimでのミックス再生）
+        \item SA に myPlayOrder==4（ドラム）の発音ロジックを追加。ハイハット／スネアを偶数Tickごとに交互発音
+        \item DrumProcessing\_new.pde を新しいSA仕様に合わせて修正し、未インストールライブラリ（processing.sound）依存とAPI誤用（Noise.setAmplitude）を解消
+        \item ファイル構成をMA/MP1・MP2/SA/SP\_Piano・SP\_Drumに再編し、GitHubへpush
+    \end{itemize}
+    \item \textbf{重大課題（影響度：高）：}
+    \begin{itemize}
+        \item ローカル環境にarduino-cli等のコンパイラがなく、Claude Codeでの修正はコードレビューのみで実機・実コンパイル未検証
+        \item MA/MP側（Master Arduino／Processing）はメンバーが独自に大幅改修中で、SA/SPとのプロトコル整合性は未確認
+    \end{itemize}
+\end{itemize}
+
+% ===== セクション2: 作業ログ（詳細トラッキング） =====
+\section{作業ログ（詳細トラッキング）}
+
+% 各作業項目は \subsection で記述する
+% 必要に応じて \subsubsection を追加してよい
+
+\subsection{SA\_ptype1.ino のコンパイルエラー修正}
+\noindent
+作業日時：2026-06-18 \quad 状態：完了 \quad 進捗率：100\%
+
+\noindent
+\textbf{依存関係・ブロッカー：}なし
+
+\noindent
+\textbf{作業内容：}
+
+楽譜配列を2次元（和音用）から1次元へリファクタリングした際、myPlayOrder==2/3の分岐が
+削除済みの \texttt{pitch\_sub}/\texttt{duration\_sub}/\texttt{SCORE\_LENGTH\_SUB} を参照したままになっており、
+かつ \texttt{pitch\_main[index][0]} のような2次元添字アクセスが残っていたためビルド不能になっていた。
+単一の \texttt{pitch[]}/\texttt{duration[]} 配列と \texttt{startTick} オフセットによるロジックに統一して解消した。
+
+その後、UNO R4 WiFi（Renesasコア）に書き込んだ際に
+\texttt{passing 'volatile arduino::String' as 'this' argument discards qualifiers} が発生。
+RenesasコアのStringクラスにはvolatile修飾のメンバ関数が無いことが原因であったため、
+受信バッファを \texttt{volatile char} 配列＋長さ変数に置き換え、\texttt{loop()} 側で通常のStringへ
+変換する方式に変更して解消した。
+
+\subsection{演奏順（myPlayOrder）ごとの開始位置・合流ロジックの調整}
+\noindent
+作業日時：2026-06-18 \quad 状態：完了 \quad 進捗率：100\%
+
+\noindent
+\textbf{依存関係・ブロッカー：}なし
+
+\noindent
+\textbf{作業内容：}
+
+myPlayOrder==2,3 が演奏を開始するTickと、楽譜上のどの要素目から始めるかを
+\texttt{startTick}／\texttt{indexOffset} という2変数で一般化。要望に応じて開始要素を
+37→33要素目に調整した後、TickCount=66（myPlayOrder==1が65要素目を演奏するタイミング）
+以降はmyPlayOrder==1と同じindex進行に合流するよう変更した。
+
+\subsection{主旋律・対旋律の同時演奏機能の追加（SA／SP）}
+\noindent
+作業日時：2026-06-18 \quad 状態：完了 \quad 進捗率：100\%
+
+\noindent
+\textbf{依存関係・ブロッカー：}対旋律データは過去にrevertされたコミット（対旋律の楽譜を作成）の
+\texttt{pitch\_sub}/\texttt{duration\_sub} を再利用することで合意
+
+\noindent
+\textbf{作業内容：}
+
+SA\_ptype1.ino で主旋律（\texttt{pitch\_main}/\texttt{duration\_main}）と対旋律
+（\texttt{pitch\_sub}/\texttt{duration\_sub}）を毎Tickで計算し、
+\texttt{mainPitch,mainDuration,subPitch,subDuration} の4値をSerialで送信するよう変更。
+SP\_ptype1.pde（現SP\_Piano）側は \texttt{playVoice()} を追加し、2音をそれぞれ
+\texttt{out.playNote()} に渡すことで、Minimの出力バス上でミックスして同時再生できるようにした。
+
+\subsection{ドラム機能（myPlayOrder==4 / INST\_ID==4）の追加}
+\noindent
+作業日時：2026-06-18 \quad 状態：完了 \quad 進捗率：100\%
+
+\noindent
+\textbf{依存関係・ブロッカー：}既存の \texttt{Drumslave\_ver2.ino} を参考実装として利用
+
+\noindent
+\textbf{作業内容：}
+
+SA\_ptype1.ino に \texttt{handleDrum()} を追加し、INST\_ID==4のときだけ通常楽器の処理から
+分岐させ、他楽器（INST\_ID!=4）の既存ロジックには影響を与えないようにした。
+要件：(1)ハイハット(drumType=2,vel=80)とスネア(drumType=1,vel=110)の2種類、
+(2)\texttt{i2cReceiveCount-1} をTickCount（0始まり）として扱う、
+(3)TickCountが偶数のときだけ発音、(4)発音ごとにハイハット→スネアと交互、
+(5)TickCount==97（i2cReceiveCount==98）でisPlaying=falseにして終了、
+(6)出力フォーマットは \texttt{Drumslave\_ver2.ino} と同じ \texttt{drumType,velocity,BPM}、
+をすべて満たす実装とした。
+
+\subsection{DrumProcessing\_new.pde のSA仕様対応・エラー修正}
+\noindent
+作業日時：2026-06-18 \quad 状態：完了 \quad 進捗率：100\%
+
+\noindent
+\textbf{依存関係・ブロッカー：}なし
+
+\noindent
+\textbf{作業内容：}
+
+旧DrumProcessing\_new.pdeは\texttt{Drumslave\_ver2.ino}向けに書かれており、
+\texttt{START}/\texttt{END}/\texttt{"DrumSlave ready"}という明示的なステータス文字列を前提にしていたが、
+新しいSAの\texttt{handleDrum()}はこれらを送信せず、デバッグ用の行（\texttt{"I2C: ..."}等）も
+同じシリアルに混在する。カンマ区切りでちょうど3項目の行のみを演奏データとして扱うように修正し、
+\texttt{isPlaying}/\texttt{hitCount}の管理もステータス文字列に依存しない自己完結型のロジックに変更した
+（偶数Tickのみ発音のため、全98Tick中の総発音数は49回であることも反映）。
+
+その後、実行時に2つのエラーが発生：
+\begin{itemize}
+    \item \texttt{No library found for processing.sound}：Processing Soundライブラリが未インストール。
+    本プロジェクトの他のSPファイルで既に動作確認済みの\texttt{ddf.minim}に置き換え、
+    新規ライブラリのインストールを不要にして解消。
+    \item \texttt{The function setAmplitude(float) does not exist}：Minimの\texttt{Noise}クラスには
+    \texttt{setAmplitude()}メソッドが存在せず、振幅はコンストラクタで指定する仕様であったため、
+    \texttt{new Noise(amplitude, Noise.Tint.WHITE)}の形に修正して解消。
+\end{itemize}
+
+\subsection{ファイル構成の再編とGitHubへの反映}
+\noindent
+作業日時：2026-06-18 \quad 状態：完了 \quad 進捗率：100\%
+
+\noindent
+\textbf{依存関係・ブロッカー：}なし
+
+\noindent
+\textbf{作業内容：}
+
+\texttt{MA\_ptype1}/\texttt{MP\_ptype1}/\texttt{SA\_ptype1}/\texttt{SP\_ptype1} を
+\texttt{MA}/\texttt{MP}/\texttt{SA}/\texttt{SP} 配下に再編。
+\texttt{MP}は\texttt{MP1}/\texttt{MP2}、\texttt{SP}は\texttt{SP\_Piano\_ptype1}/\texttt{SP\_Drum}に分割。
+Gitのリネーム検知により差分を最小化した上でコミット・pushを実施。
+
+% ===== セクション3: 課題管理 =====
+\section{課題管理}
+
+\begin{table}[H]
+    \centering
+    \caption{課題一覧}
+    \label{tab:issues}
+    \begin{tabular}{lllllll}
+        \toprule
+        課題 & 発生原因 & 影響度 & 優先度 & 対策 & 期限 & 状態 \\
+        \midrule
+        実機・コンパイル未検証 & ローカルにarduino-cli等が無い & 高 & 高 & 実機でのアップロード確認 & 未定 & 未対応 \\
+        MA/MPとの整合性未確認 & MA/MPはメンバーが別途大幅改修中 & 中 & 中 & 結合テストで送受信フォーマットを再確認 & 未定 & 未対応 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\noindent
+{\small ※影響度＝プロジェクトへのインパクト \quad ※優先度＝対応の緊急性}
+
+% ===== セクション4: AI利用状況と検証 =====
+\section{AI利用状況と検証（再現性重視）}
+
+\subsection{利用内容}
+
+\begin{itemize}
+    \item \textbf{利用目的：}デバッグ（コンパイルエラー原因特定）／実装（主旋律・対旋律同時演奏、ドラム機能追加）／レビュー（Processing側ライブラリ・API不整合の修正）
+    \item \textbf{入力（プロンプト要旨）：}
+    \begin{itemize}
+        \item 修正前後のSA\_ptype1.inoの差分を提示し、問題点と原因の特定を依頼
+        \item UNO R4 WiFi書き込み時のコンパイルエラーメッセージをそのまま提示し修正を依頼
+        \item 「myPlayOrder==2,3を1番手の進行に65要素目で合流させたい」等、楽譜進行の仕様変更を自然言語で指示
+        \item 「主旋律と対旋律を同時に演奏するようにSA・SPを変更せよ」「Drumslave\_ver2.inoを参考にmyPlayOrder==4のドラム機能を追加せよ」という要件付きの実装依頼
+        \item Processing実行時のエラーメッセージ（ライブラリ未検出、メソッド不存在）をそのまま提示し修正を依頼
+    \end{itemize}
+    \item \textbf{出力概要：}
+    \begin{itemize}
+        \item コンパイルエラーの原因（配列リファクタの取り残し、volatile String非対応）の説明と修正コード
+        \item SA/SPのシリアル通信フォーマットを4値・3値に拡張する実装
+        \item INST\_ID==4専用のドラム発音ロジック（handleDrum関数）
+        \item processing.sound依存をddf.minimに置き換えたDrumProcessing\_new.pde
+    \end{itemize}
+\end{itemize}
+
+\subsection{検証方法}
+
+{\small ※第三者が再現できるレベルで記述}
+
+\begin{itemize}
+    \item \textbf{検証手法：}コードレビュー（差分確認・ロジックの手計算によるTick/Index対応確認）。実機・Arduino IDE上でのコンパイル確認はarduino-cli等が無いため未実施。
+    \item \textbf{参照資料：}
+    \begin{itemize}
+        \item リポジトリ内の既存実装（Drumslave\_ver2.ino, DrumProcessing\_new.pde, SP\_ptype1.pde）
+        \item Arduino Renesasコアのコンパイルエラーメッセージ／Processing実行時エラーメッセージ
+    \end{itemize}
+    \item \textbf{検証手順：}
+    \begin{enumerate}
+        \item 要件（Tick数・要素番号・出力フォーマット等）を数式で書き出し、実装後のindex計算が要件と一致するか手計算で確認
+        \item ユーザーから提示された実際のコンパイル／実行時エラーメッセージに対して、該当箇所のAPI仕様（Renesas String, Minim Noiseクラス等）を確認し修正
+        \item ユーザーが実機・実行環境で再テストし、結果（エラー解消／要望との不一致）をフィードバックしてもらう形で反復修正
+    \end{enumerate}
+\end{itemize}
+
+\subsection{ファクトチェック結果}
+
+\begin{itemize}
+    \item \textbf{一致点：}
+    \begin{itemize}
+        \item Minimの\texttt{Noise}クラスがコンストラクタ引数で振幅を取り、\texttt{setAmplitude()}を持たないという挙動はユーザー報告のコンパイルエラーと一致
+        \item RenesasコアのStringクラスがvolatile修飾メンバ関数を持たない点はAVRコアとの差異として実際のエラーメッセージと一致
+    \end{itemize}
+    \item \textbf{不一致・疑義：}
+    \begin{itemize}
+        \item 76→81要素スキップ等、要件が反復的に変更されたため、最終的に採用されなかった中間実装が複数発生（コミットメッセージには最終状態のみ記載し、廃止された内容は記述していない）
+    \end{itemize}
+    \item \textbf{最終判断：}採用（提示された各エラーメッセージに対する修正はすべてユーザー環境で解消確認済みと推定。ただし実機での最終動作確認は未実施）
+    \item \textbf{根拠：}
+    \begin{itemize}
+        \item ユーザーからの追加エラー報告が、修正のたびに別の具体的なエラーメッセージに変化しており、前の修正が該当エラーを解消したことを示唆している
+    \end{itemize}
+\end{itemize}
+
+% ===== セクション5: 次回計画 =====
+\section{次回計画}
+
+\begin{itemize}
+    \item \textbf{目標：}
+    \begin{itemize}
+        \item 実機（Arduino UNO R4 WiFi×複数台、PC上のProcessing）でMA/MP/SA/SPを結合し、主旋律・対旋律・ドラムを含む全体演奏を通しで確認する
+        \item MA/MP側の独自改修（非ブロッキングSerial受信化等）とSA/SPのプロトコルの整合性を確認する
+    \end{itemize}
+    \item \textbf{達成基準：}
+    \begin{itemize}
+        \item 楽曲（もりのくまさん）が冒頭から終端まで、ピアノ（主旋律＋対旋律）とドラムが破綻なく同時再生される
+    \end{itemize}
+    \item \textbf{期限：}未定
+\end{itemize}
+
+% ===== セクション6: その他 =====
+\section{その他}
+
+\begin{itemize}
+    \item 作業ログ本ファイル（\texttt{tasklog\_temp.tex}）はGitHubへのpush対象から除外する運用とする
+    \item PDFへのコンパイルは指示があるまで行わない
+\end{itemize}
+
+% ===== セクション7: 付録 =====
+\section{付録}
+
+\begin{itemize}
+    \item \textbf{添付資料：}
+    \begin{itemize}
+        \item ソースコード：\texttt{group7/Ptype1/SA/SA\_ptype1.ino}, \texttt{group7/Ptype1/SP/SP\_Piano\_ptype1/SP\_Piano.pde}, \texttt{group7/Ptype1/SP/SP\_Drum/SP\_Drum\_ptype1.pde}
+        \item 回路図／設計図：なし
+    \end{itemize}
+    \item \textbf{添付範囲：}差分（本ログ記載の各作業項目に対応するコミットの差分）
+\end{itemize}
+
+\end{document}

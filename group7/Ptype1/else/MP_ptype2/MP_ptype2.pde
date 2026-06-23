@@ -62,7 +62,7 @@ void setup() {
   
   try {
     printArray(Serial.list());
-    myPort = new Serial(this, Serial.list()[5], 9600);
+    myPort = new Serial(this, Serial.list()[3], 9600);
     myPort.bufferUntil('\n'); // 改行コードが来るまでデータを溜める
     isSerialConnected = true;
   } catch (Exception e) {

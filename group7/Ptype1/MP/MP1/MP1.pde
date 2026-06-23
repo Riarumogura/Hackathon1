@@ -64,7 +64,7 @@ void setup() {
   try {
     printArray(Serial.list());
     // 環境に合わせて Serial.list()[番号] の位置を調整してください
-    myPort = new Serial(this, Serial.list()[3], 9600);
+    myPort = new Serial(this, Serial.list()[4], 9600);
     myPort.bufferUntil('\n');
     isSerialConnected = true;
   } catch (Exception e) {

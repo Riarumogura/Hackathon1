@@ -7,7 +7,7 @@
 #define MY_I2C_ADDRESS    0      // この楽器のI2Cアドレス
 #define SERIAL_BAUD       9600
 #define BASE_OCTAVE       4      // 楽譜の基準オクターブ（国際式4）
-#define INST_ID 4                // ピアノ=1, 木琴＝2, フルート=3, ドラム=4
+#define INST_ID 3                // ピアノ=1, 木琴＝2, フルート=3, ドラム=4
 
 // ドラム用定数（Drumslave_ver2.inoと同じ値）
 #define DRUM_HIHAT       2
@@ -16,10 +16,10 @@
 #define DRUM_VEL_SNARE   110
 
 // ----------------------------------------------------------------------------
-// 楽譜データ（もりのくまさん / 主旋律＋対旋律 / 120bpm基準）
+// 楽譜データ（もりのくまさん / 主旋律 / 120bpm基準）
 // ----------------------------------------------------------------------------
 
-const int pitch_main[] = {
+const int pitch[] = {
   0, 67, 69, 71,
   72, 0, 67, 0, 64, 0, 60, 0,
   69, 0, 0, 0, 0, 69, 71, 69,
@@ -35,7 +35,7 @@ const int pitch_main[] = {
   60, 0, 0, 0, 0, 0,
 };
 
-const int duration_main[] = {
+const int duration[] = {
   0, 250, 250, 250,
   500, 0, 500, 0, 500, 0, 500, 0,
   1000, 0, 0, 0, 0, 250, 250, 250,
@@ -50,39 +50,7 @@ const int duration_main[] = {
   500, 0, 500, 0, 500, 0, 500, 0,
   1000, 0, 0, 0, 0, 0,
 };
-
-const int pitch_sub[] = {
-  48, 0, 0, 0,
-  48, 0, 0, 0, 48, 0, 0, 0,
-  53, 0, 0, 0, 53, 0, 0, 0,
-  55, 0, 0, 0, 55, 0, 0, 0,
-  48, 0, 0, 0, 48, 0, 0, 0,
-  48, 0, 0, 0, 48, 0, 0, 0,
-  48, 0, 0, 0, 48, 0, 0, 0,
-  55, 0, 0, 0, 55, 0, 0, 0,
-  48, 0, 0, 0, 48, 0, 0, 0,
-  48, 0, 0, 0, 48, 0, 0, 0,
-  53, 0, 0, 0, 53, 0, 0, 0,
-  55, 0, 0, 0, 55, 0, 0, 0,
-  48, 0, 0, 0, 0, 0,
-};
-
-const int duration_sub[] = {
-  1000, 0, 0, 0,
-  1000, 0, 0, 0, 1000, 0, 0, 0,
-  1000, 0, 0, 0, 1000, 0, 0, 0,
-  1000, 0, 0, 0, 1000, 0, 0, 0,
-  1000, 0, 0, 0, 1000, 0, 0, 0,
-  1000, 0, 0, 0, 1000, 0, 0, 0,
-  1000, 0, 0, 0, 1000, 0, 0, 0,
-  1000, 0, 0, 0, 1000, 0, 0, 0,
-  1000, 0, 0, 0, 1000, 0, 0, 0,
-  1000, 0, 0, 0, 1000, 0, 0, 0,
-  1000, 0, 0, 0, 1000, 0, 0, 0,
-  1000, 0, 0, 0, 1000, 0, 0, 0,
-  1000, 0, 0, 0, 0, 0,
-};
-const int SCORE_LENGTH = sizeof(pitch_main) / sizeof(pitch_main[0]);
+const int SCORE_LENGTH = sizeof(pitch) / sizeof(pitch[0]);
 
 // ----------------------------------------------------------------------------
 // グローバル変数
@@ -189,33 +157,22 @@ void loop() {
           }
 
           if (index < SCORE_LENGTH) {
-            // ① pitchのオクターブ変更処理（主旋律・対旋律それぞれ）
+            // ① pitchのオクターブ変更処理
             int targetOctave = receivedOctave - 1;
+            int shiftedPitch = 0;
 
-            int shiftedPitchMain = 0;
-            if (pitch_main[index] > 0) {
-              shiftedPitchMain = pitch_main[index] + (targetOctave - BASE_OCTAVE) * 12;
-              shiftedPitchMain = constrain(shiftedPitchMain, 0, 127);
+            if (pitch[index] > 0) {
+              shiftedPitch = pitch[index] + (targetOctave - BASE_OCTAVE) * 12;
+              shiftedPitch = constrain(shiftedPitch, 0, 127);
             }
 
-            int shiftedPitchSub = 0;
-            if (pitch_sub[index] > 0) {
-              shiftedPitchSub = pitch_sub[index] + (targetOctave - BASE_OCTAVE) * 12;
-              shiftedPitchSub = constrain(shiftedPitchSub, 0, 127);
-            }
+            // ② durationのBPM補正処理
+            long targetDuration = (long)duration[index] * 120 / currentBPM;
 
-            // ② durationのBPM補正処理（主旋律・対旋律それぞれ）
-            long targetDurationMain = (long)duration_main[index] * 120 / currentBPM;
-            long targetDurationSub  = (long)duration_sub[index]  * 120 / currentBPM;
-
-            // ③ カンマ区切りでシリアルへ送信（主旋律,主duration,対旋律,対duration）
-            Serial.print(shiftedPitchMain);
+            // ③ カンマ区切りでシリアルモニタへ送信
+            Serial.print(shiftedPitch);
             Serial.print(",");
-            Serial.print(targetDurationMain);
-            Serial.print(",");
-            Serial.print(shiftedPitchSub);
-            Serial.print(",");
-            Serial.println(targetDurationSub);
+            Serial.println(targetDuration);
 
             if (index == SCORE_LENGTH - 1) {
               isPlaying = false;
