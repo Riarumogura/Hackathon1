@@ -63,7 +63,7 @@ class Piano implements Instrument {
 
   void noteOff() {
     adsr.noteOff();
-    // 音量のリリース（余韻）が完全に終わった後に、自動的にoutから切断する
+    // 音量のリリース（余韻）が完全に終わった後に，自動的にoutから切断する
     adsr.unpatchAfterRelease(out);
   }
 }

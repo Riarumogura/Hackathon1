@@ -14,10 +14,10 @@ Waveform hammerWave;
 
 // -------------------------------------------------------------
 // 1. 全楽器共通のベースクラス
-// 今後新しい楽器を追加する際は、このクラスを継承（extends）して作成します
+// 今後新しい楽器を追加する際は，このクラスを継承（extends）して作成します
 // -------------------------------------------------------------
 abstract class BaseInstrument implements Instrument {
-  // Minimの仕様に合わせ、発音開始と終了のメソッドを強制します
+  // Minimの仕様に合わせ，発音開始と終了のメソッドを強制します
   abstract public void noteOn(float duration);
   abstract public void noteOff();
 }
@@ -51,7 +51,7 @@ class Piano extends BaseInstrument {
     // アタック振幅を amplitude * 0.6f に調整（音量飽和の防止）
     adsr = new ADSR(amplitude * 0.6f, 0.006, 0.8, 0.2, 0.35);
 
-    // 高音域の動的コントロール（打鍵時に高域を開放し、徐々に閉じる）
+    // 高音域の動的コントロール（打鍵時に高域を開放し，徐々に閉じる）
     float velocityFactor = map(amplitude, 0.0f, 1.0f, 3.0f, 7.0f);
     float maxCutoff = min(14000, frequency * velocityFactor);
     float minCutoff = frequency * 1.5;

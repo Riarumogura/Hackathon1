@@ -9,6 +9,10 @@ import ddf.minim.ugens.*;
 Minim minim;
 AudioOutput out;
 
+// MA→SP遅延計測用（TEST専用）。Arduino側の #define LATENCY_TEST と必ず一致させること。
+boolean LATENCY_TEST = true;
+PrintWriter latencyLog;
+
 // ------------------------------------------------------------
 // ピアノ音色クラス（piano_ptype4.pdeから移植）
 // ------------------------------------------------------------
@@ -67,9 +71,14 @@ void setup() {
   out   = minim.getLineOut();
 
   printArray(Serial.list());
-  // ★ ポート番号を環境に合わせて変更
-  slavePort = new Serial(this, Serial.list()[4], 9600);
+  // ★ このマシンでの計測用に実ポート名を直接指定（Slave Arduino/ピアノ）
+  slavePort = new Serial(this, "/dev/cu.usbmodemF412FA9B4D402", 115200);
   slavePort.bufferUntil('\n');
+
+  if (LATENCY_TEST) {
+    latencyLog = createWriter("latency_log_piano.csv");
+    latencyLog.println("tick_id,recv_time_ms,midi,freq_hz,dur_sec,played");
+  }
 
   println("SlaveProcessing（ピアノ）起動");
 }
@@ -102,15 +111,28 @@ void serialEvent(Serial p) {
   }
 
   String[] parts = split(line, ',');
-  if (parts.length != 2 && parts.length != 4) return;
+
+  int tickId = -1;
+  if (LATENCY_TEST) {
+    // Arduino側でtickIdが先頭に1フィールド追加されている前提（3 or 5要素）
+    if (parts.length != 3 && parts.length != 5) return;
+    tickId = int(parts[0]);
+    parts = subset(parts, 1);
+  } else {
+    if (parts.length != 2 && parts.length != 4) return;
+  }
+
+  long recvTime = System.currentTimeMillis();
 
   // 最後の項目が常にduration（旧プロトコルはparts[1]，ptype2は parts[3]）
   float durSec = int(parts[parts.length - 1]) / 1000.0;  // ms → 秒
 
   // 残りの項目（1〜3個）をそれぞれ和音として再生（0=休符はスキップ）
+  boolean anyPlayed = false;
   for (int i = 0; i < parts.length - 1; i++) {
     int midiNote = int(parts[i]);
     if (midiNote <= 0) continue;
+    anyPlayed = true;
 
     // MIDIノート番号 → 周波数
     float freq = 440.0 * pow(2.0, (midiNote - 69) / 12.0);
@@ -119,10 +141,24 @@ void serialEvent(Serial p) {
     out.playNote(0.0, durSec, new Piano(freq, 0.6));
 
     println("再生 midi:" + midiNote + " freq:" + nf(freq, 0, 1) + "Hz dur:" + durSec + "s");
+
+    if (LATENCY_TEST) {
+      latencyLog.println(tickId + "," + recvTime + "," + midiNote + "," + nf(freq, 0, 1) + "," + durSec + ",1");
+      latencyLog.flush();
+    }
+  }
+
+  if (LATENCY_TEST && !anyPlayed) {
+    latencyLog.println(tickId + "," + recvTime + ",,,,0");
+    latencyLog.flush();
   }
 }
 
 void stop() {
+  if (LATENCY_TEST && latencyLog != null) {
+    latencyLog.flush();
+    latencyLog.close();
+  }
   minim.stop();
   super.stop();
 }

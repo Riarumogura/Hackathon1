@@ -11,7 +11,7 @@ class Piano implements Instrument {
   Waveform pianoWave;
 
   Piano(float frequency, float amplitude) {
-    // gen9 を使用して、倍音ごとに振幅と位相（波のズレ）を設定
+    // gen9 を使用して，倍音ごとに振幅と位相（波のズレ）を設定
     // multipliers: 基音(1)から第6倍音まで
     // amplitudes:  各倍音の強さ
     // phases:      各倍音の位相（0.0〜1.0で指定）。わずかにずらすことで深みを出します
